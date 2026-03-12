@@ -11,10 +11,9 @@ security = HTTPBearer()
 
 
 def get_current_user(
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        db: Session = Depends(get_db)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
 ):
-
     token = credentials.credentials
 
     try:
@@ -33,3 +32,16 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="User not found")
 
     return user
+
+
+USER_CREATION_RULES = {
+    "admin": ["junior", "mid", "senior", "lead", "admin"],
+    "lead": ["junior", "mid", "senior"],
+    "senior": ["junior"],
+    "mid": [],
+    "junior": [],
+}
+
+
+def can_create_role(creator_role: str, target_role: str) -> bool:
+    return target_role in USER_CREATION_RULES.get(creator_role, [])

@@ -14,7 +14,7 @@ def seed_roles():
         {"name": "junior", "level": 1},
         {"name": "mid", "level": 2},
         {"name": "senior", "level": 3},
-        {"name": "team_lead", "level": 4},
+        {"name": "lead", "level": 4},
         {"name": "admin", "level": 5},
     ]
 
