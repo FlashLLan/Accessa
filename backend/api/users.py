@@ -7,7 +7,7 @@ from backend.models.role import Role
 from backend.core.dependencies import get_current_user, can_create_role
 from backend.core.security import hash_password
 from backend.schemas.user import UserCreate, UserResponse
-
+from backend.services.audit_service import log_action
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
@@ -55,5 +55,15 @@ def create_user(
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="create_user",
+        entity_type="user",
+        entity_id=new_user.id,
+        details=f"Created user '{new_user.email}' with role_id={new_user.role_id}"
+    )
+    db.commit()
 
     return new_user

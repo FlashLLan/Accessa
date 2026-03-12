@@ -5,7 +5,7 @@ from database.db import get_db
 from backend.models.user import User
 from backend.schemas.auth import LoginRequest, TokenResponse
 from backend.core.security import verify_password, create_access_token
-
+from backend.services.audit_service import log_action
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
@@ -23,6 +23,16 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     token = create_access_token(
         data={"sub": str(user.id)}
     )
+
+    log_action(
+        db=db,
+        user_id=user.id,
+        action="login",
+        entity_type="user",
+        entity_id=user.id,
+        details=f"User '{user.email}' logged in"
+    )
+    db.commit()
 
     return {
         "access_token": token,
