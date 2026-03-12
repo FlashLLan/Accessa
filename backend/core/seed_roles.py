@@ -1,10 +1,13 @@
 from sqlalchemy.orm import Session
 
-from database.db import SessionLocal
+from database.db import SessionLocal, engine, Base
+import backend.models
 from backend.models.role import Role
 
 
 def seed_roles():
+    Base.metadata.create_all(bind=engine)
+
     db: Session = SessionLocal()
 
     roles = [
