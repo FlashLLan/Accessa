@@ -383,3 +383,43 @@ def add_comment_to_request(
     db.commit()
 
     return new_comment
+
+
+@router.post("/{request_id}/apply", response_model=ChangeRequestResponse)
+def apply_change_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
+
+    if not change_request:
+        raise HTTPException(status_code=404, detail="Change request not found")
+
+    if current_user.role.name != "admin" and change_request.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the creator or admin can mark this request as applied"
+        )
+
+    if change_request.status != RequestStatus.APPROVED:
+        raise HTTPException(
+            status_code=400,
+            detail="Only approved requests can be marked as applied"
+        )
+
+    change_request.status = RequestStatus.APPLIED
+    db.commit()
+    db.refresh(change_request)
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="apply_change_request",
+        entity_type="change_request",
+        entity_id=change_request.id,
+        details="Marked request as applied"
+    )
+    db.commit()
+
+    return change_request

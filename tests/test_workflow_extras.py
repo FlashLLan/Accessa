@@ -1,5 +1,4 @@
 from backend.models.audit_log import AuditLog
-from backend.models.audit_log import AuditLog
 from backend.models.enums import RequestStatus
 
 def test_creator_can_add_comment_to_request(client, db, create_user, create_role, login_user, seed_change_request):

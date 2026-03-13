@@ -2,8 +2,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from backend.models.enums import RequestType, EnvironmentType, RiskLevel, RequestStatus, ApprovalDecision
-from backend.schemas.user import UserResponse
-
+from backend.schemas.user import UserResponse, UserShortResponse
 
 class ChangeRequestCreate(BaseModel):
     title: str
@@ -24,8 +23,8 @@ class ChangeRequestResponse(BaseModel):
     environment: EnvironmentType
     risk_level: RiskLevel
     status: RequestStatus
-    creator: UserResponse
-    assigned_reviewer: UserResponse
+    creator: UserShortResponse
+    assigned_reviewer: UserShortResponse
     created_at: datetime
     updated_at: datetime
 
@@ -47,7 +46,7 @@ class ChangeRequestUpdate(BaseModel):
 
 class ApprovalHistoryResponse(BaseModel):
     id: int
-    reviewer_id: int
+    reviewer: UserShortResponse
     decision: ApprovalDecision
     decision_comment: str | None = None
     created_at: datetime

@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String, Text,
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.models.enums import RequestStatus
 from backend.main import app
 from backend.core.dependencies import get_current_user
 from backend.models.change_request import ChangeRequest
@@ -466,5 +467,81 @@ def test_get_approval_history_returns_entries(client, db):
     assert response.status_code == 200, response.text
     data = response.json()
     assert len(data) == 1
-    assert data[0]["reviewer_id"] == reviewer.id
+    assert data[0]["reviewer"]["id"] == reviewer.id
+    assert data[0]["reviewer"]["role"]["name"] == reviewer.role.name
     assert data[0]["decision"] == ApprovalDecision.APPROVED.value
+
+
+def test_creator_can_mark_approved_request_as_applied(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    creator_role = create_role(db, "reviewer", level=5)
+    admin_role = create_role(db, "admin", level=10)
+
+    creator = create_user(db, role=creator_role, label="creator")
+    reviewer = create_user(db, role=admin_role, label="reviewer")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.APPROVED,
+    )
+
+    login_user(creator)
+
+    response = client.post(f"/change-requests/{req.id}/apply")
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["id"] == req.id
+    assert data["status"] == RequestStatus.APPLIED.value
+
+
+def test_cannot_apply_request_unless_approved(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    creator_role = create_role(db, "reviewer", level=5)
+    admin_role = create_role(db, "admin", level=10)
+
+    creator = create_user(db, role=creator_role, label="creator")
+    reviewer = create_user(db, role=admin_role, label="reviewer")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.PENDING_REVIEW,
+    )
+
+    login_user(creator)
+
+    response = client.post(f"/change-requests/{req.id}/apply")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only approved requests can be marked as applied"
+
+
+def test_unrelated_user_cannot_mark_request_as_applied(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    reviewer_role = create_role(db, "reviewer", level=5)
+    admin_role = create_role(db, "admin", level=10)
+
+    creator = create_user(db, role=reviewer_role, label="creator")
+    reviewer = create_user(db, role=admin_role, label="reviewer")
+    stranger = create_user(db, role=reviewer_role, label="stranger")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.APPROVED,
+    )
+
+    login_user(stranger)
+
+    response = client.post(f"/change-requests/{req.id}/apply")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the creator or admin can mark this request as applied"

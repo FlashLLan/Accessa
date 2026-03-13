@@ -12,3 +12,4 @@ class Role(Base):
     level = Column(Integer, nullable=False)
 
     users = relationship("User", back_populates="role")
+
