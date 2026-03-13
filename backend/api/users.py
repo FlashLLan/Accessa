@@ -6,19 +6,61 @@ from backend.models.user import User
 from backend.models.role import Role
 from backend.core.dependencies import get_current_user, can_create_role
 from backend.core.security import hash_password
-from backend.schemas.user import UserCreate, UserResponse
+from backend.schemas.user import UserCreate, UserResponse, UserShortResponse
 from backend.services.audit_service import log_action
+
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get("/", response_model=list[UserResponse])
-def list_users(db: Session = Depends(get_db)):
+def list_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can view all users")
+
     return db.query(User).all()
 
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/reviewers", response_model=list[UserShortResponse])
+def list_reviewers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    reviewers = (
+        db.query(User)
+        .join(Role)
+        .filter(
+            User.is_active == True,
+            Role.name.in_(["admin", "reviewer"])
+        )
+        .all()
+    )
+
+    return reviewers
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if current_user.role.name != "admin" and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return user
 
 
 @router.post("/", response_model=UserResponse)
@@ -67,3 +109,71 @@ def create_user(
     db.commit()
 
     return new_user
+
+@router.patch("/{user_id}/deactivate", response_model=UserResponse)
+def deactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can deactivate users")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
+
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="User is already inactive")
+
+    user.is_active = False
+    db.commit()
+    db.refresh(user)
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="deactivate_user",
+        entity_type="user",
+        entity_id=user.id,
+        details=f"Deactivated user '{user.email}'"
+    )
+    db.commit()
+
+    return user
+
+
+@router.patch("/{user_id}/reactivate", response_model=UserResponse)
+def reactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can reactivate users")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.is_active:
+        raise HTTPException(status_code=400, detail="User is already active")
+
+    user.is_active = True
+    db.commit()
+    db.refresh(user)
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="reactivate_user",
+        entity_type="user",
+        entity_id=user.id,
+        details=f"Reactivated user '{user.email}'"
+    )
+    db.commit()
+
+    return user
