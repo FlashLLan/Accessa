@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { loginRequest } from "../api/auth";
+import { buildMockUser } from "../utils/mockUser";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -9,63 +11,86 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setIsSubmitting(true);
 
     try {
-      const response = await fetch("http://localhost:8000/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const data = await loginRequest({ email, password });
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Login failed: ${response.status} ${text}`);
-      }
-
-      const data = await response.json();
-
-      login(data.access_token, {
-        id: 1,
-        name: email,
-        role: "admin",
-      });
-
+      login(data.access_token, buildMockUser(email));
       navigate("/dashboard");
     } catch (error) {
       console.error("Login failed", error);
-      setError(error.message);
+
+      const message =
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Login failed. Please try again.";
+
+      setError(String(message));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div>
-      <h1>Login</h1>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-header">
+          <p className="auth-kicker">Accessa</p>
+          <h1>Sign in</h1>
+          <p className="auth-subtitle">
+            Use your account to access requests, reviews, and user management.
+          </p>
+        </div>
 
-      <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              placeholder="admin@test.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+          </div>
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+          <div className="form-group">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </div>
 
-        <button type="submit">Login</button>
-      </form>
+          {error && <div className="auth-error">{error}</div>}
 
-      {error && <p>{error}</p>}
+          <button className="btn btn-primary auth-submit" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in..." : "Login"}
+          </button>
+        </form>
+
+        <div className="auth-help">
+          <span>Test accounts:</span>
+          <code>admin@test.com</code>
+          <code>lead@test.com</code>
+          <code>senior@test.com</code>
+          <code>mid@test.com</code>
+          <code>junior@test.com</code>
+        </div>
+      </div>
     </div>
   );
 }

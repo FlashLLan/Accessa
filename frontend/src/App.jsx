@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import RoleGuard from "./components/common/RoleGuard";
+import AppLayout from "./components/layout/AppLayout";
 
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -19,18 +19,22 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/requests" element={<RequestsPage />} />
-        <Route path="/requests/new" element={<CreateRequestPage />} />
-        <Route path="/requests/:id" element={<RequestDetailsPage />} />
-      </Route>
+        <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/requests" element={<RequestsPage />} />
+          <Route path="/requests/new" element={<CreateRequestPage />} />
+          <Route path="/requests/:id" element={<RequestDetailsPage />} />
 
-      <Route element={<RoleGuard allowedRoles={["admin", "lead", "senior"]} />}>
-        <Route path="/review" element={<ReviewPage />} />
-      </Route>
+          <Route
+            element={<RoleGuard allowedRoles={["admin", "lead", "senior"]} />}
+          >
+            <Route path="/review" element={<ReviewPage />} />
+          </Route>
 
-      <Route element={<RoleGuard allowedRoles={["admin"]} />}>
-        <Route path="/admin/users" element={<UserManagementPage />} />
+          <Route element={<RoleGuard allowedRoles={["admin"]} />}>
+            <Route path="/admin/users" element={<UserManagementPage />} />
+          </Route>
+        </Route>
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
