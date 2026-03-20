@@ -1,15 +1,40 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { mockRequests } from "../utils/mockRequests";
+import { requestService } from "../services/requestsService.js";
 
 export default function RequestsPage() {
+  const [requests, setRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadRequests() {
+      try {
+        setIsLoading(true);
+        setError("");
+        const data = await requestService.list();
+        setRequests(data);
+      } catch (err) {
+        console.error("Failed to load requests", err);
+        setError(
+          err?.response?.data?.detail ||
+            "Failed to load requests. Please try again."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadRequests();
+  }, []);
+
   return (
     <div className="page-card">
       <div className="page-header-row">
         <div>
           <h2 className="page-title">Requests</h2>
           <p className="page-subtitle">
-            Browse submitted requests, track their status, and open a specific
-            request for more details.
+            Browse your change requests and the requests assigned to you for review.
           </p>
         </div>
 
@@ -18,39 +43,60 @@ export default function RequestsPage() {
         </Link>
       </div>
 
-      <div className="request-list">
-        {mockRequests.map((request) => (
-          <Link
-            key={request.id}
-            to={`/requests/${request.id}`}
-            className="request-card"
-          >
-            <div className="request-card-top">
-              <div>
-                <h3 className="request-card-title">{request.title}</h3>
-                <p className="request-card-meta">
-                  {request.type} • Created by {request.creator}
-                </p>
+      {isLoading && <div className="empty-state">Loading requests...</div>}
+
+      {error && <div className="auth-error">{error}</div>}
+
+      {!isLoading && !error && requests.length === 0 && (
+        <div className="empty-state">No requests found yet.</div>
+      )}
+
+      {!isLoading && !error && requests.length > 0 && (
+        <div className="request-list">
+          {requests.map((request) => (
+            <Link
+              key={request.id}
+              to={`/requests/${request.id}`}
+              className="request-card"
+            >
+              <div className="request-card-top">
+                <div>
+                  <h3 className="request-card-title">{request.title}</h3>
+                  <p className="request-card-meta">
+                    {formatEnumLabel(request.request_type)} • Created by{" "}
+                    {request.creator?.full_name || request.creator?.email || "Unknown"}
+                  </p>
+                </div>
+
+                <span className={`status-badge status-${request.status}`}>
+                  {formatEnumLabel(request.status)}
+                </span>
               </div>
 
-              <span className={`status-badge status-${slugify(request.status)}`}>
-                {request.status}
-              </span>
-            </div>
+              <p className="request-card-description">{request.description}</p>
 
-            <p className="request-card-description">{request.description}</p>
-
-            <div className="request-card-bottom">
-              <span className="request-chip">{request.priority} Priority</span>
-              <span className="request-date">{request.createdAt}</span>
-            </div>
-          </Link>
-        ))}
-      </div>
+              <div className="request-card-bottom">
+                <span className="request-chip">
+                  {formatEnumLabel(request.risk_level)} Risk
+                </span>
+                <span className="request-date">
+                  {formatDate(request.created_at)}
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function slugify(value) {
-  return value.toLowerCase().replace(/\s+/g, "-");
+function formatEnumLabel(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatDate(value) {
+  return new Date(value).toLocaleString();
 }

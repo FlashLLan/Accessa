@@ -1,0 +1,57 @@
+import client from "./client";
+
+export async function getChangeRequests() {
+  const response = await client.get("/change-requests/");
+  return response.data;
+}
+
+export async function getChangeRequestById(id) {
+  const response = await client.get(`/change-requests/${id}`);
+  return response.data;
+}
+
+export async function createChangeRequest(payload) {
+  const response = await client.post("/change-requests/", payload);
+  return response.data;
+}
+
+export async function submitChangeRequest(id) {
+  const response = await client.post(`/change-requests/${id}/submit`);
+  return response.data;
+}
+
+export async function approveChangeRequest(id, decision_comment = "") {
+  const response = await client.post(`/change-requests/${id}/approve`, {
+    decision_comment,
+  });
+  return response.data;
+}
+
+export async function rejectChangeRequest(id, decision_comment = "") {
+  const response = await client.post(`/change-requests/${id}/reject`, {
+    decision_comment,
+  });
+  return response.data;
+}
+
+export async function getChangeRequestApprovals(id) {
+  const response = await client.get(`/change-requests/${id}/approvals`);
+  return response.data;
+}
+
+export async function getChangeRequestComments(id) {
+  const response = await client.get(`/change-requests/${id}/comments`);
+  return response.data;
+}
+
+export async function addChangeRequestComment(id, comment_text) {
+  const response = await client.post(`/change-requests/${id}/comments`, {
+    comment_text,
+  });
+  return response.data;
+}
+
+export async function applyChangeRequest(id) {
+  const response = await client.post(`/change-requests/${id}/apply`);
+  return response.data;
+}

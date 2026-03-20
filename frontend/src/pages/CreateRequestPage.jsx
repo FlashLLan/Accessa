@@ -1,15 +1,48 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { requestService } from "../services/requestsService.js";
+import { getReviewers } from "../api/users";
 
 const initialForm = {
   title: "",
-  type: "Access Request",
-  priority: "Medium",
   description: "",
+  request_type: "access_change",
+  target_system: "",
+  environment: "dev",
+  risk_level: "medium",
+  assigned_reviewer_id: "",
 };
 
 export default function CreateRequestPage() {
+  const navigate = useNavigate();
+
   const [form, setForm] = useState(initialForm);
-  const [submitted, setSubmitted] = useState(false);
+  const [reviewers, setReviewers] = useState([]);
+  const [isLoadingReviewers, setIsLoadingReviewers] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    async function loadReviewers() {
+      try {
+        setIsLoadingReviewers(true);
+        setError("");
+        const data = await getReviewers();
+        setReviewers(data);
+      } catch (err) {
+        console.error("Failed to load reviewers", err);
+        setError(
+          err?.response?.data?.detail ||
+            "Failed to load reviewers. Please try again."
+        );
+      } finally {
+        setIsLoadingReviewers(false);
+      }
+    }
+
+    loadReviewers();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -20,28 +53,47 @@ export default function CreateRequestPage() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log("Mock request submitted:", form);
-    setSubmitted(true);
+    try {
+      setIsSubmitting(true);
+      setError("");
+      setSuccessMessage("");
 
-    setForm(initialForm);
+      const payload = {
+        ...form,
+        assigned_reviewer_id: Number(form.assigned_reviewer_id),
+      };
+
+      const created = await requestService.create(payload);
+
+      setSuccessMessage("Request created successfully.");
+      setForm(initialForm);
+
+      setTimeout(() => {
+        navigate(`/requests/${created.id}`);
+      }, 600);
+    } catch (err) {
+      console.error("Failed to create request", err);
+      setError(
+        err?.response?.data?.detail ||
+          "Failed to create the request. Please check your input."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="page-card">
       <h2 className="page-title">Create Request</h2>
       <p className="page-subtitle">
-        Submit a new request through a simple form. For now this only simulates
-        submission and logs the payload in the browser console.
+        Submit a new change request using the real backend API.
       </p>
 
-      {submitted && (
-        <div className="success-banner">
-          Mock request submitted successfully. Check the browser console.
-        </div>
-      )}
+      {error && <div className="auth-error">{error}</div>}
+      {successMessage && <div className="success-banner">{successMessage}</div>}
 
       <form className="request-form" onSubmit={handleSubmit}>
         <div className="form-group">
@@ -52,41 +104,9 @@ export default function CreateRequestPage() {
             type="text"
             value={form.title}
             onChange={handleChange}
-            placeholder="Enter a clear request title"
+            placeholder="Grant staging dashboard access"
             required
           />
-        </div>
-
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="type">Request Type</label>
-            <select
-              id="type"
-              name="type"
-              value={form.type}
-              onChange={handleChange}
-            >
-              <option>Access Request</option>
-              <option>Repository Access</option>
-              <option>Network Access</option>
-              <option>User Provisioning</option>
-              <option>Permission Change</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="priority">Priority</label>
-            <select
-              id="priority"
-              name="priority"
-              value={form.priority}
-              onChange={handleChange}
-            >
-              <option>Low</option>
-              <option>Medium</option>
-              <option>High</option>
-            </select>
-          </div>
         </div>
 
         <div className="form-group">
@@ -94,24 +114,106 @@ export default function CreateRequestPage() {
           <textarea
             id="description"
             name="description"
-            rows="7"
+            rows="6"
             value={form.description}
             onChange={handleChange}
-            placeholder="Describe the reason, scope, and any important details"
+            placeholder="Describe the requested change and the reason for it"
             required
           />
         </div>
 
+        <div className="form-group">
+          <label htmlFor="target_system">Target System</label>
+          <input
+            id="target_system"
+            name="target_system"
+            type="text"
+            value={form.target_system}
+            onChange={handleChange}
+            placeholder="Grafana / Internal API / VPN Gateway"
+            required
+          />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="request_type">Request Type</label>
+            <select
+              id="request_type"
+              name="request_type"
+              value={form.request_type}
+              onChange={handleChange}
+            >
+              <option value="access_change">Access Change</option>
+              <option value="configuration_change">Configuration Change</option>
+              <option value="deployment_change">Deployment Change</option>
+              <option value="resource_change">Resource Change</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="environment">Environment</label>
+            <select
+              id="environment"
+              name="environment"
+              value={form.environment}
+              onChange={handleChange}
+            >
+              <option value="dev">Dev</option>
+              <option value="staging">Staging</option>
+              <option value="production">Production</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="risk_level">Risk Level</label>
+            <select
+              id="risk_level"
+              name="risk_level"
+              value={form.risk_level}
+              onChange={handleChange}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="assigned_reviewer_id">Assigned Reviewer</label>
+            <select
+              id="assigned_reviewer_id"
+              name="assigned_reviewer_id"
+              value={form.assigned_reviewer_id}
+              onChange={handleChange}
+              required
+              disabled={isLoadingReviewers}
+            >
+              <option value="">
+                {isLoadingReviewers ? "Loading reviewers..." : "Select reviewer"}
+              </option>
+              {reviewers.map((reviewer) => (
+                <option key={reviewer.id} value={reviewer.id}>
+                  {reviewer.full_name || reviewer.email} ({reviewer.role?.name || "role"})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="page-actions">
-          <button className="btn btn-primary" type="submit">
-            Submit Request
+          <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Creating..." : "Create Request"}
           </button>
           <button
             className="btn btn-secondary"
             type="button"
             onClick={() => {
               setForm(initialForm);
-              setSubmitted(false);
+              setError("");
+              setSuccessMessage("");
             }}
           >
             Reset

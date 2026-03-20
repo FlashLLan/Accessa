@@ -1,31 +1,80 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { mockRequests } from "../utils/mockRequests";
+import { requestService } from "../services/requestsService.js";
 import { useAuth } from "../hooks/useAuth";
-
-const reviewableRoles = ["admin", "lead", "senior"];
-const reviewableStatuses = ["Pending Review", "Changes Requested"];
 
 export default function ReviewPage() {
   const { user } = useAuth();
 
-  const canReview = reviewableRoles.includes(user?.role);
-  const reviewQueue = mockRequests.filter((request) =>
-    reviewableStatuses.includes(request.status)
-  );
+  const [requests, setRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [decisionComment, setDecisionComment] = useState({});
+  const [actionLoadingId, setActionLoadingId] = useState(null);
 
-  if (!canReview) {
-    return (
-      <div className="page-card">
-        <h2 className="page-title">Review Queue</h2>
-        <p className="page-subtitle">
-          You do not currently have permission to review requests.
-        </p>
+  useEffect(() => {
+    loadRequests();
+  }, []);
 
-        <div className="empty-state">
-          This area is reserved for admins, leads, and seniors.
-        </div>
-      </div>
-    );
+  async function loadRequests() {
+    try {
+      setIsLoading(true);
+      setError("");
+      const data = await requestService.list();
+
+      const reviewable = data.filter((request) => {
+        const isPending = request.status === "pending_review";
+        const isAdmin = user?.role === "admin";
+        const isAssignedReviewer =
+          user?.email &&
+          request.assigned_reviewer?.email &&
+          user.email.toLowerCase() === request.assigned_reviewer.email.toLowerCase();
+
+        return isPending && (isAdmin || isAssignedReviewer);
+      });
+
+      setRequests(reviewable);
+    } catch (err) {
+      console.error("Failed to load review queue", err);
+      setError(
+        err?.response?.data?.detail ||
+          "Failed to load review queue. Please try again."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleApprove(id) {
+    try {
+      setActionLoadingId(id);
+      setError("");
+      await requestService.approve(id, decisionComment[id] || "");
+      await loadRequests();
+    } catch (err) {
+      console.error("Approve failed", err);
+      setError(
+        err?.response?.data?.detail || "Failed to approve the request."
+      );
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function handleReject(id) {
+    try {
+      setActionLoadingId(id);
+      setError("");
+      await requestService.reject(id, decisionComment[id] || "");
+      await loadRequests();
+    } catch (err) {
+      console.error("Reject failed", err);
+      setError(
+        err?.response?.data?.detail || "Failed to reject the request."
+      );
+    } finally {
+      setActionLoadingId(null);
+    }
   }
 
   return (
@@ -34,45 +83,66 @@ export default function ReviewPage() {
         <div>
           <h2 className="page-title">Review Queue</h2>
           <p className="page-subtitle">
-            Review incoming requests that are waiting for approval or require
-            additional clarification.
+            Requests assigned to you that are waiting for review.
           </p>
         </div>
 
-        <div className="review-summary-badge">
-          {reviewQueue.length} open
-        </div>
+        <div className="review-summary-badge">{requests.length} open</div>
       </div>
 
-      {reviewQueue.length === 0 ? (
-        <div className="empty-state">
-          No requests are currently waiting for review.
-        </div>
-      ) : (
+      {isLoading && <div className="empty-state">Loading review queue...</div>}
+      {error && <div className="auth-error">{error}</div>}
+
+      {!isLoading && !error && requests.length === 0 && (
+        <div className="empty-state">No requests are waiting for your review.</div>
+      )}
+
+      {!isLoading && !error && requests.length > 0 && (
         <div className="review-list">
-          {reviewQueue.map((request) => (
+          {requests.map((request) => (
             <div key={request.id} className="review-card">
               <div className="review-card-main">
                 <div className="review-card-top">
                   <div>
                     <h3 className="request-card-title">{request.title}</h3>
                     <p className="request-card-meta">
-                      {request.type} • Created by {request.creator}
+                      {formatEnumLabel(request.request_type)} • Created by{" "}
+                      {request.creator?.full_name || request.creator?.email || "Unknown"}
                     </p>
                   </div>
 
-                  <span
-                    className={`status-badge status-${slugify(request.status)}`}
-                  >
-                    {request.status}
+                  <span className={`status-badge status-${request.status}`}>
+                    {formatEnumLabel(request.status)}
                   </span>
                 </div>
 
                 <p className="request-card-description">{request.description}</p>
 
                 <div className="review-meta-row">
-                  <span className="request-chip">{request.priority} Priority</span>
-                  <span className="request-date">{request.createdAt}</span>
+                  <span className="request-chip">
+                    {formatEnumLabel(request.risk_level)} Risk
+                  </span>
+                  <span className="request-date">
+                    {formatDate(request.created_at)}
+                  </span>
+                </div>
+
+                <div className="form-group review-comment-box">
+                  <label htmlFor={`decision-${request.id}`}>
+                    Decision comment
+                  </label>
+                  <textarea
+                    id={`decision-${request.id}`}
+                    rows="3"
+                    placeholder="Optional approval/rejection note"
+                    value={decisionComment[request.id] || ""}
+                    onChange={(e) =>
+                      setDecisionComment((prev) => ({
+                        ...prev,
+                        [request.id]: e.target.value,
+                      }))
+                    }
+                  />
                 </div>
               </div>
 
@@ -80,14 +150,21 @@ export default function ReviewPage() {
                 <Link to={`/requests/${request.id}`} className="btn btn-secondary">
                   Open
                 </Link>
-                <button type="button" className="btn btn-primary">
-                  Approve
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => handleApprove(request.id)}
+                  disabled={actionLoadingId === request.id}
+                >
+                  {actionLoadingId === request.id ? "Working..." : "Approve"}
                 </button>
-                <button type="button" className="btn btn-secondary">
-                  Request Changes
-                </button>
-                <button type="button" className="btn btn-danger">
-                  Reject
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => handleReject(request.id)}
+                  disabled={actionLoadingId === request.id}
+                >
+                  {actionLoadingId === request.id ? "Working..." : "Reject"}
                 </button>
               </div>
             </div>
@@ -98,6 +175,12 @@ export default function ReviewPage() {
   );
 }
 
-function slugify(value) {
-  return value.toLowerCase().replace(/\s+/g, "-");
+function formatEnumLabel(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatDate(value) {
+  return new Date(value).toLocaleString();
 }

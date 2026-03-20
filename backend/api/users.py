@@ -38,7 +38,7 @@ def list_reviewers(
         .join(Role)
         .filter(
             User.is_active == True,
-            Role.name.in_(["admin", "reviewer"])
+            Role.name.in_(["admin", "senior", "lead"])
         )
         .all()
     )
