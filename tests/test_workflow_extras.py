@@ -2,11 +2,11 @@ from backend.models.audit_log import AuditLog
 from backend.models.enums import RequestStatus
 
 def test_creator_can_add_comment_to_request(client, db, create_user, create_role, login_user, seed_change_request):
-    reviewer_role = create_role(db, "reviewer", level=5)
-    creator_role = reviewer_role
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=creator_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -28,11 +28,11 @@ def test_creator_can_add_comment_to_request(client, db, create_user, create_role
 
 
 def test_reviewer_can_list_comments_on_request(client, db, create_user, create_role, login_user, seed_change_request):
-    reviewer_role = create_role(db, "reviewer", level=5)
-    creator_role = reviewer_role
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=creator_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -56,12 +56,13 @@ def test_reviewer_can_list_comments_on_request(client, db, create_user, create_r
 
 
 def test_unrelated_user_cannot_view_or_add_comments(client, db, create_user, create_role, login_user, seed_change_request):
-    role = create_role(db, "reviewer", level=5)
+    junior_role = create_role(db, "junior", level=1)
+    mid_role = create_role(db, "mid", level=3)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=role, label="creator")
-    reviewer = create_user(db, role=role, label="reviewer")
-    stranger = create_user(db, role=role, label="stranger")
-
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+    stranger = create_user(db, role=mid_role, label="mid")
     req = seed_change_request(
         db,
         creator_id=creator.id,
@@ -82,7 +83,7 @@ def test_unrelated_user_cannot_view_or_add_comments(client, db, create_user, cre
 
 def test_admin_can_view_audit_logs(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    user_role = create_role(db, "reviewer", level=5)
+    user_role = create_role(db, "senior", level=5)
 
     admin = create_user(db, role=admin_role, label="admin")
     user = create_user(db, role=user_role, label="user")
@@ -109,8 +110,8 @@ def test_admin_can_view_audit_logs(client, db, create_user, create_role, login_u
 
 
 def test_regular_user_cannot_view_audit_logs(client, db, create_user, create_role, login_user):
-    role = create_role(db, "reviewer", level=5)
-    user = create_user(db, role=role, label="user")
+    mid_role = create_role(db, "mid", level=3)
+    user = create_user(db, role=mid_role, label="user")
 
     login_user(user)
 
@@ -121,11 +122,11 @@ def test_regular_user_cannot_view_audit_logs(client, db, create_user, create_rol
 
 
 def test_high_risk_request_requires_high_level_reviewer_on_create(client, db, create_user, create_role, login_user):
-    reviewer_role = create_role(db, "reviewer", level=5)
-    creator_role = reviewer_role
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=creator_role, label="creator")
-    low_reviewer = create_user(db, role=reviewer_role, label="lowreviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    low_reviewer = create_user(db, role=senior_role, label="lowreviewer")
 
     login_user(creator)
 
@@ -143,14 +144,14 @@ def test_high_risk_request_requires_high_level_reviewer_on_create(client, db, cr
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "High-risk requests must be assigned to an admin or high-level reviewer"
+    assert response.json()["detail"] == "High-risk requests must be assigned to a lead or admin"
 
 
 def test_high_risk_request_allows_admin_reviewer_on_create(client, db, create_user, create_role, login_user):
-    creator_role = create_role(db, "reviewer", level=5)
+    junior_role = create_role(db, "junior", level=1)
     admin_role = create_role(db, "admin", level=10)
 
-    creator = create_user(db, role=creator_role, label="creator")
+    creator = create_user(db, role=junior_role, label="junior")
     admin = create_user(db, role=admin_role, label="admin")
 
     login_user(creator)
@@ -174,11 +175,11 @@ def test_high_risk_request_allows_admin_reviewer_on_create(client, db, create_us
 
 
 def test_update_to_high_risk_fails_with_low_level_reviewer(client, db, create_user, create_role, login_user, seed_change_request):
-    reviewer_role = create_role(db, "reviewer", level=5)
-    creator_role = reviewer_role
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=creator_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -195,4 +196,4 @@ def test_update_to_high_risk_fails_with_low_level_reviewer(client, db, create_us
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "High-risk requests must be assigned to an admin or high-level reviewer"
+    assert response.json()["detail"] == "High-risk requests must be assigned to a lead or admin"

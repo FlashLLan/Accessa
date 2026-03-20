@@ -4,7 +4,7 @@ from backend.core.dependencies import get_current_user
 
 def test_admin_can_list_users(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    user_role = create_role(db, "reviewer", level=5)
+    user_role = create_role(db, "mid", level=5)
 
     admin = create_user(db, role=admin_role, label="admin")
     create_user(db, role=user_role, label="user1")
@@ -19,7 +19,7 @@ def test_admin_can_list_users(client, db, create_user, create_role, login_user):
 
 
 def test_regular_user_cannot_list_users(client, db, create_user, create_role, login_user):
-    role = create_role(db, "reviewer", level=5)
+    role = create_role(db, "mid", level=5)
     user = create_user(db, role=role, label="user")
 
     login_user(user)
@@ -30,7 +30,7 @@ def test_regular_user_cannot_list_users(client, db, create_user, create_role, lo
 
 
 def test_user_can_access_me_endpoint(client, db, create_user, create_role, login_user):
-    role = create_role(db, "reviewer", level=5)
+    role = create_role(db, "mid", level=5)
     user = create_user(db, role=role, label="user")
 
     login_user(user)
@@ -42,7 +42,7 @@ def test_user_can_access_me_endpoint(client, db, create_user, create_role, login
 
 
 def test_user_can_access_own_profile(client, db, create_user, create_role, login_user):
-    role = create_role(db, "reviewer", level=5)
+    role = create_role(db, "mid", level=5)
     user = create_user(db, role=role, label="user")
 
     login_user(user)
@@ -54,7 +54,7 @@ def test_user_can_access_own_profile(client, db, create_user, create_role, login
 
 
 def test_user_cannot_access_other_user_profile(client, db, create_user, create_role, login_user):
-    role = create_role(db, "reviewer", level=5)
+    role = create_role(db, "mid", level=5)
 
     user1 = create_user(db, role=role, label="user1")
     user2 = create_user(db, role=role, label="user2")
@@ -68,10 +68,10 @@ def test_user_cannot_access_other_user_profile(client, db, create_user, create_r
 
 def test_reviewer_list_endpoint(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    reviewer_role = create_role(db, "reviewer", level=5)
+    senior_role = create_role(db, "senior", level=5)
 
     admin = create_user(db, role=admin_role, label="admin")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    reviewer = create_user(db, role=senior_role, label="reviewer")
 
     login_user(admin)
 
@@ -88,7 +88,7 @@ def test_reviewer_list_endpoint(client, db, create_user, create_role, login_user
 
 def test_admin_can_deactivate_another_user(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    user_role = create_role(db, "reviewer", level=5)
+    user_role = create_role(db, "senior", level=5)
 
     admin = create_user(db, role=admin_role, label="admin")
     target_user = create_user(db, role=user_role, label="target")
@@ -105,7 +105,7 @@ def test_admin_can_deactivate_another_user(client, db, create_user, create_role,
 
 def test_admin_can_reactivate_inactive_user(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    user_role = create_role(db, "reviewer", level=5)
+    user_role = create_role(db, "senior", level=5)
 
     admin = create_user(db, role=admin_role, label="admin")
     target_user = create_user(db, role=user_role, label="target")
@@ -124,7 +124,7 @@ def test_admin_can_reactivate_inactive_user(client, db, create_user, create_role
 
 
 def test_regular_user_cannot_deactivate_user(client, db, create_user, create_role, login_user):
-    role = create_role(db, "reviewer", level=5)
+    role = create_role(db, "mid", level=3)
 
     user1 = create_user(db, role=role, label="user1")
     user2 = create_user(db, role=role, label="user2")
@@ -151,7 +151,7 @@ def test_admin_cannot_deactivate_self(client, db, create_user, create_role, logi
 
 def test_cannot_deactivate_already_inactive_user(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    user_role = create_role(db, "reviewer", level=5)
+    user_role = create_role(db, "senior", level=5)
 
     admin = create_user(db, role=admin_role, label="admin")
     target_user = create_user(db, role=user_role, label="target")
@@ -169,7 +169,7 @@ def test_cannot_deactivate_already_inactive_user(client, db, create_user, create
 
 def test_cannot_reactivate_already_active_user(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    user_role = create_role(db, "reviewer", level=5)
+    user_role = create_role(db, "senior", level=5)
 
     admin = create_user(db, role=admin_role, label="admin")
     target_user = create_user(db, role=user_role, label="target")

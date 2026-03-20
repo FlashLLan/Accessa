@@ -5,7 +5,7 @@ class RoleName(str, enum.Enum):
     JUNIOR = "junior"
     MID = "mid"
     SENIOR = "senior"
-    TEAM_LEAD = "team_lead"
+    LEAD = "lead"
     ADMIN = "admin"
 
 

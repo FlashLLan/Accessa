@@ -20,10 +20,10 @@ def test_admin_can_list_roles(client, db, create_user, create_role, login_user):
 
 def test_regular_user_cannot_list_roles(client, db, create_user, create_role, login_user):
     admin_role = create_role(db, "admin", level=10)
-    reviewer_role = create_role(db, "reviewer", level=5)
+    senior_role = create_role(db, "senior", level=5)
 
     create_user(db, role=admin_role, label="admin")
-    user = create_user(db, role=reviewer_role, label="user")
+    user = create_user(db, role=senior_role, label="mid")
 
     login_user(user)
 

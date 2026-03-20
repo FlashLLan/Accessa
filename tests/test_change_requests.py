@@ -198,10 +198,11 @@ def seed_change_request(
 # ---- tests ----
 
 def test_create_change_request_success(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    reviewer_role = create_role(db, "senior", level=5)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=reviewer_role, label="senior")
 
     login_as(creator)
 
@@ -216,8 +217,8 @@ def test_create_change_request_success(client, db):
 
 
 def test_create_change_request_rejects_self_reviewer(client, db):
-    admin_role = create_role(db, "admin")
-    creator = create_user(db, role=admin_role, label="sameuser")
+    junior_role = create_role(db, "junior", level=1)
+    creator = create_user(db, role=junior_role, label="junior")
 
     login_as(creator)
 
@@ -230,12 +231,12 @@ def test_create_change_request_rejects_self_reviewer(client, db):
 
 def test_list_change_requests_admin_sees_all(client, db):
     admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    reviewer_role = create_role(db, "senior")
 
     admin = create_user(db, role=admin_role, label="admin")
     creator1 = create_user(db, role=admin_role, label="creator1")
     creator2 = create_user(db, role=admin_role, label="creator2")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    reviewer = create_user(db, role=reviewer_role, label="senior")
 
     seed_change_request(db, creator_id=creator1.id, reviewer_id=reviewer.id, title="Req 1")
     seed_change_request(db, creator_id=creator2.id, reviewer_id=reviewer.id, title="Req 2")
@@ -250,13 +251,14 @@ def test_list_change_requests_admin_sees_all(client, db):
 
 
 def test_list_change_requests_regular_user_sees_only_related(client, db):
-    admin_role = create_role(db, "admin", level=10)
-    reviewer_role = create_role(db, "reviewer", level=5)
+    junior_role = create_role(db, "junior", level=1)
+    mid_role = create_role(db, "mid", level=3)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=reviewer_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
-    stranger = create_user(db, role=reviewer_role, label="stranger")
-    other_creator = create_user(db, role=reviewer_role, label="othercreator")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+    stranger = create_user(db, role=mid_role, label="mid")
+    other_creator = create_user(db, role=junior_role, label="othercreator")
 
     related = seed_change_request(
         db,
@@ -282,12 +284,13 @@ def test_list_change_requests_regular_user_sees_only_related(client, db):
 
 
 def test_get_change_request_denies_unrelated_user(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    mid_role = create_role(db, "mid", level=3)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
-    stranger = create_user(db, role=reviewer_role, label="stranger")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+    stranger = create_user(db, role=mid_role, label="mid")
 
     req = seed_change_request(
         db,
@@ -305,11 +308,11 @@ def test_get_change_request_denies_unrelated_user(client, db):
 
 
 def test_submit_change_request_moves_draft_to_pending_review(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -327,11 +330,11 @@ def test_submit_change_request_moves_draft_to_pending_review(client, db):
 
 
 def test_update_change_request_allows_creator_to_edit_draft(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -353,11 +356,11 @@ def test_update_change_request_allows_creator_to_edit_draft(client, db):
 
 
 def test_update_change_request_blocks_edit_when_pending_review(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -378,11 +381,11 @@ def test_update_change_request_blocks_edit_when_pending_review(client, db):
 
 
 def test_approve_change_request_by_assigned_reviewer(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -408,11 +411,11 @@ def test_approve_change_request_by_assigned_reviewer(client, db):
 
 
 def test_reject_change_request_by_assigned_reviewer(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -438,11 +441,11 @@ def test_reject_change_request_by_assigned_reviewer(client, db):
 
 
 def test_get_approval_history_returns_entries(client, db):
-    admin_role = create_role(db, "admin")
-    reviewer_role = create_role(db, "reviewer")
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
 
-    creator = create_user(db, role=admin_role, label="creator")
-    reviewer = create_user(db, role=reviewer_role, label="reviewer")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
 
     req = seed_change_request(
         db,
@@ -475,11 +478,11 @@ def test_get_approval_history_returns_entries(client, db):
 def test_creator_can_mark_approved_request_as_applied(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
-    creator_role = create_role(db, "reviewer", level=5)
+    creator_role = create_role(db, "junior", level=1)
     admin_role = create_role(db, "admin", level=10)
 
-    creator = create_user(db, role=creator_role, label="creator")
-    reviewer = create_user(db, role=admin_role, label="reviewer")
+    creator = create_user(db, role=creator_role, label="junior")
+    reviewer = create_user(db, role=admin_role, label="admin")
 
     req = seed_change_request(
         db,
@@ -501,11 +504,11 @@ def test_creator_can_mark_approved_request_as_applied(
 def test_cannot_apply_request_unless_approved(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
-    creator_role = create_role(db, "reviewer", level=5)
+    creator_role = create_role(db, "junior", level=1)
     admin_role = create_role(db, "admin", level=10)
 
-    creator = create_user(db, role=creator_role, label="creator")
-    reviewer = create_user(db, role=admin_role, label="reviewer")
+    creator = create_user(db, role=creator_role, label="junior")
+    reviewer = create_user(db, role=admin_role, label="admin")
 
     req = seed_change_request(
         db,
@@ -525,12 +528,13 @@ def test_cannot_apply_request_unless_approved(
 def test_unrelated_user_cannot_mark_request_as_applied(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
-    reviewer_role = create_role(db, "reviewer", level=5)
+    junior_role = create_role(db, "junior", level=1)
+    mid_role = create_role(db, "mid", level=3)
     admin_role = create_role(db, "admin", level=10)
 
-    creator = create_user(db, role=reviewer_role, label="creator")
-    reviewer = create_user(db, role=admin_role, label="reviewer")
-    stranger = create_user(db, role=reviewer_role, label="stranger")
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=admin_role, label="admin")
+    stranger = create_user(db, role=mid_role, label="mid")
 
     req = seed_change_request(
         db,

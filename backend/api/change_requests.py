@@ -18,13 +18,23 @@ from backend.models.comment import Comment
 from backend.schemas.comment import CommentCreate, CommentResponse
 router = APIRouter(prefix="/change-requests", tags=["Change Requests"])
 
-def validate_reviewer_for_request(reviewer: User, risk_level):
-    if risk_level == RiskLevel.HIGH:
-        if reviewer.role.name != "admin" and reviewer.role.level < 8:
-            raise HTTPException(
-                status_code=400,
-                detail="High-risk requests must be assigned to an admin or high-level reviewer"
-            )
+REVIEWER_ROLES = {"senior", "lead", "admin"}
+HIGH_RISK_REVIEWER_ROLES = {"lead", "admin"}  # or {"admin"}
+
+def validate_reviewer_for_request(reviewer: User, risk_level: RiskLevel):
+    reviewer_role = reviewer.role.name
+
+    if reviewer_role not in REVIEWER_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail="Assigned reviewer must have role senior, lead, or admin"
+        )
+
+    if risk_level == RiskLevel.HIGH and reviewer_role not in HIGH_RISK_REVIEWER_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail="High-risk requests must be assigned to a lead or admin"
+        )
 @router.post("/", response_model=ChangeRequestResponse)
 def create_change_request(
     request_data: ChangeRequestCreate,
