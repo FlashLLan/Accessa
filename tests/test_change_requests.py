@@ -549,3 +549,215 @@ def test_unrelated_user_cannot_mark_request_as_applied(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Only the creator or admin can mark this request as applied"
+
+def test_cannot_approve_request_unless_pending_review(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+
+    # approved request cannot be approved again
+    approved_req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.APPROVED,
+    )
+
+    login_user(reviewer)
+    response = client.post(
+        f"/change-requests/{approved_req.id}/approve",
+        json={"decision_comment": "Approving again"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only pending requests can be approved"
+
+    # draft request cannot be approved
+    draft_req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.DRAFT,
+    )
+
+    response = client.post(
+        f"/change-requests/{draft_req.id}/approve",
+        json={"decision_comment": "Approving draft"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only pending requests can be approved"
+
+
+def test_cannot_reject_request_unless_pending_review(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+
+    # rejected request cannot be rejected again
+    rejected_req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.REJECTED,
+    )
+
+    login_user(reviewer)
+    response = client.post(
+        f"/change-requests/{rejected_req.id}/reject",
+        json={"decision_comment": "Rejecting again"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only pending requests can be rejected"
+
+    # draft request cannot be rejected
+    draft_req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.DRAFT,
+    )
+
+    response = client.post(
+        f"/change-requests/{draft_req.id}/reject",
+        json={"decision_comment": "Rejecting draft"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only pending requests can be rejected"
+
+
+def test_creator_cannot_approve_own_request_even_if_assigned_as_reviewer(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    senior_role = create_role(db, "senior", level=5)
+
+    creator = create_user(db, role=senior_role, label="senior")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=creator.id,
+        status=RequestStatus.PENDING_REVIEW,
+    )
+
+    login_user(creator)
+
+    response = client.post(
+        f"/change-requests/{req.id}/approve",
+        json={"decision_comment": "Self-approve"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "You cannot approve your own request"
+
+
+def test_non_assigned_reviewer_cannot_approve_request(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+    lead_role = create_role(db, "lead", level=8)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    assigned_reviewer = create_user(db, role=senior_role, label="senior")
+    other_reviewer = create_user(db, role=lead_role, label="lead")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=assigned_reviewer.id,
+        status=RequestStatus.PENDING_REVIEW,
+    )
+
+    login_user(other_reviewer)
+
+    response = client.post(
+        f"/change-requests/{req.id}/approve",
+        json={"decision_comment": "I am not assigned"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the assigned reviewer or admin can approve this request"
+
+
+def test_non_assigned_reviewer_cannot_reject_request(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+    lead_role = create_role(db, "lead", level=8)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    assigned_reviewer = create_user(db, role=senior_role, label="senior")
+    other_reviewer = create_user(db, role=lead_role, label="lead")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=assigned_reviewer.id,
+        status=RequestStatus.PENDING_REVIEW,
+    )
+
+    login_user(other_reviewer)
+
+    response = client.post(
+        f"/change-requests/{req.id}/reject",
+        json={"decision_comment": "I am not assigned"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the assigned reviewer or admin can reject this request"
+
+
+def test_rejected_request_can_be_updated_and_resubmitted(
+    client, db, create_user, create_role, login_user, seed_change_request
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.REJECTED,
+        title="Old title",
+    )
+
+    login_user(creator)
+
+    patch_response = client.patch(
+        f"/change-requests/{req.id}",
+        json={
+            "title": "Updated after rejection",
+            "description": "Fixed issues and resubmitting",
+            "request_type": req.request_type.value,
+            "target_system": req.target_system,
+            "environment": req.environment.value,
+            "risk_level": req.risk_level.value,
+            "assigned_reviewer_id": reviewer.id,
+        },
+    )
+
+    assert patch_response.status_code == 200, patch_response.text
+    patch_data = patch_response.json()
+    assert patch_data["title"] == "Updated after rejection"
+    assert patch_data["status"] == RequestStatus.REJECTED.value
+
+    submit_response = client.post(f"/change-requests/{req.id}/submit")
+
+    assert submit_response.status_code == 200, submit_response.text
+    submit_data = submit_response.json()
+    assert submit_data["status"] == RequestStatus.PENDING_REVIEW.value

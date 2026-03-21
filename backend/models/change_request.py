@@ -22,7 +22,7 @@ class ChangeRequest(Base):
     target_system = Column(String, nullable=False)
     environment = Column(Enum(EnvironmentType), nullable=False)
     risk_level = Column(Enum(RiskLevel), nullable=False)
-    status = Column(Enum(RequestStatus), default=RequestStatus.PENDING_REVIEW, nullable=False)
+    status = Column(Enum(RequestStatus), default=RequestStatus.DRAFT, nullable=False)
 
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     assigned_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
