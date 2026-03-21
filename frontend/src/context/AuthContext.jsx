@@ -1,40 +1,88 @@
-import { createContext, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { getMe } from "../api/users";
 
-export const AuthContext = createContext();
+export const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(localStorage.getItem("token"));
-  const [user, setUser] = useState(
-    JSON.parse(localStorage.getItem("user")) || null
-  );
+function normalizeUser(rawUser) {
+  if (!rawUser) return null;
 
-  const isAuthenticated = !!token;
-
-  const login = (token, userData) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(userData));
-    setToken(token);
-    setUser(userData);
+  return {
+    ...rawUser,
+    name: rawUser.name ?? rawUser.full_name ?? "",
+    role:
+      typeof rawUser.role === "string"
+        ? rawUser.role
+        : rawUser.role?.name ?? "",
   };
+}
 
-  const logout = () => {
+export function AuthProvider({ children }) {
+  const [token, setToken] = useState(() => localStorage.getItem("token"));
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const logout = useCallback(() => {
     localStorage.removeItem("token");
-    localStorage.removeItem("user");
     setToken(null);
     setUser(null);
-  };
+    setAuthLoading(false);
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        token,
-        user,
-        login,
-        logout,
-        isAuthenticated,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const fetchMe = useCallback(async () => {
+    try {
+      const me = await getMe();
+      setUser(normalizeUser(me));
+    } catch (error) {
+      console.error("Failed to fetch current user", error);
+      logout();
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [logout]);
+
+  useEffect(() => {
+    if (!token) {
+      setUser(null);
+      setAuthLoading(false);
+      return;
+    }
+
+    setAuthLoading(true);
+    fetchMe();
+  }, [token, fetchMe]);
+
+  const login = useCallback(
+    async (newToken) => {
+      localStorage.setItem("token", newToken);
+      setToken(newToken);
+      setAuthLoading(true);
+
+      try {
+        const me = await getMe();
+        setUser(normalizeUser(me));
+      } catch (error) {
+        console.error("Failed to fetch current user after login", error);
+        logout();
+        throw error;
+      } finally {
+        setAuthLoading(false);
+      }
+    },
+    [logout]
   );
-};
+
+  const value = useMemo(
+    () => ({
+      token,
+      user,
+      authLoading,
+      isAuthenticated: Boolean(token && user),
+      login,
+      logout,
+      refreshMe: fetchMe,
+    }),
+    [token, user, authLoading, login, logout, fetchMe]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}

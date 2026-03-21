@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
-
+import {
+  formatDate,
+  formatEnumLabel,
+  getStatusBadgeClass,
+} from "../utils/requestPresentation";
 export default function RequestsPage() {
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +72,7 @@ export default function RequestsPage() {
                   </p>
                 </div>
 
-                <span className={`status-badge status-${request.status}`}>
+                <span className={getStatusBadgeClass(request.status)}>
                   {formatEnumLabel(request.status)}
                 </span>
               </div>
@@ -91,12 +95,3 @@ export default function RequestsPage() {
   );
 }
 
-function formatEnumLabel(value) {
-  return String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleString();
-}

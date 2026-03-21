@@ -2,6 +2,19 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
 import { useAuth } from "../hooks/useAuth";
+import {
+  canApplyRequest,
+  canApproveRequest,
+  canRejectRequest,
+  canSubmitRequest,
+  canViewRequestComments
+} from "../utils/requestPermissions";
+import {
+  formatDate,
+  formatEnumLabel,
+  getStatusBadgeClass,
+  getDecisionBadgeClass,
+} from "../utils/requestPresentation";
 
 export default function RequestDetailsPage() {
   const { id } = useParams();
@@ -16,6 +29,7 @@ export default function RequestDetailsPage() {
   const [error, setError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const canViewComments = canViewRequestComments(user, request);
 
   useEffect(() => {
     loadAll();
@@ -165,28 +179,11 @@ export default function RequestDetailsPage() {
     );
   }
 
-  const isAdmin = user?.role === "admin";
-  const isCreator =
-    user?.email &&
-    request?.creator?.email &&
-    user.email.toLowerCase() === request.creator.email.toLowerCase();
-
-  const isAssignedReviewer =
-    user?.email &&
-    request?.assigned_reviewer?.email &&
-    user.email.toLowerCase() === request.assigned_reviewer.email.toLowerCase();
-
-  const canSubmit =
-    isCreator &&
-    (request?.status === "draft" || request?.status === "rejected");
-
-  const canReview =
-    (isAdmin || isAssignedReviewer) &&
-    !isCreator &&
-    request?.status === "pending_review";
-
-  const canApply =
-    request?.status === "approved" && (isCreator || isAdmin);
+const canSubmit = canSubmitRequest(user, request);
+const canApprove = canApproveRequest(user, request);
+const canReject = canRejectRequest(user, request);
+const canApply = canApplyRequest(user, request);
+const canReview = canApprove || canReject;
 
   return (
     <div className="page-card">
@@ -209,11 +206,13 @@ export default function RequestDetailsPage() {
       <div className="details-grid">
         <div className="detail-box">
           <span className="detail-label">Status</span>
-          <strong>{formatEnumLabel(request.status)}</strong>
+          <span className={getStatusBadgeClass(request.status)}>
+                {formatEnumLabel(request.status)}
+            </span>
         </div>
 
         <div className="detail-box">
-          <span className="detail-label">Risk Level</span>
+        <span className="detail-label">Risk Level</span>
           <strong>{formatEnumLabel(request.risk_level)}</strong>
         </div>
 
@@ -380,11 +379,7 @@ export default function RequestDetailsPage() {
               <div key={approval.id} className="timeline-card">
                 <div className="timeline-card-top">
                   <strong>{approval.reviewer?.full_name || approval.reviewer?.email}</strong>
-                  <span
-                    className={`status-badge status-${String(
-                      approval.decision || ""
-                    ).toLowerCase()}`}
-                  >
+                  <span className={getDecisionBadgeClass(approval.decision)}>
                     {formatEnumLabel(approval.decision)}
                   </span>
                 </div>
@@ -399,12 +394,3 @@ export default function RequestDetailsPage() {
   );
 }
 
-function formatEnumLabel(value) {
-  return String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleString();
-}

@@ -2,6 +2,12 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
 import { useAuth } from "../hooks/useAuth";
+import { canReviewRequest } from "../utils/requestPermissions";
+import {
+  formatDate,
+  formatEnumLabel,
+  getStatusBadgeClass,
+} from "../utils/requestPresentation";
 
 export default function ReviewPage() {
   const { user } = useAuth();
@@ -22,16 +28,7 @@ export default function ReviewPage() {
       setError("");
       const data = await requestService.list();
 
-      const reviewable = data.filter((request) => {
-        const isPending = request.status === "pending_review";
-        const isAdmin = user?.role === "admin";
-        const isAssignedReviewer =
-          user?.email &&
-          request.assigned_reviewer?.email &&
-          user.email.toLowerCase() === request.assigned_reviewer.email.toLowerCase();
-
-        return isPending && (isAdmin || isAssignedReviewer);
-      });
+      const reviewable = data.filter((request) => canReviewRequest(user, request));
 
       setRequests(reviewable);
     } catch (err) {
@@ -111,7 +108,7 @@ export default function ReviewPage() {
                     </p>
                   </div>
 
-                  <span className={`status-badge status-${request.status}`}>
+                  <span className={getStatusBadgeClass(request.status)}>
                     {formatEnumLabel(request.status)}
                   </span>
                 </div>
@@ -175,12 +172,3 @@ export default function ReviewPage() {
   );
 }
 
-function formatEnumLabel(value) {
-  return String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleString();
-}

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { loginRequest } from "../api/auth";
-import { buildMockUser } from "../utils/mockUser";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -21,7 +20,7 @@ export default function LoginPage() {
     try {
       const data = await loginRequest({ email, password });
 
-      login(data.access_token, buildMockUser(email));
+      await login(data.access_token);
       navigate("/dashboard");
     } catch (error) {
       console.error("Login failed", error);
