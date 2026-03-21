@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../hooks/useAuth";
 import {
   createUser,
@@ -104,6 +105,18 @@ function formatDateTime(value) {
   useEffect(() => {
     loadData();
   }, []);
+
+
+ useEffect(() => {
+  if (!confirmModal.open) return;
+
+  const originalOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+
+  return () => {
+    document.body.style.overflow = originalOverflow;
+  };
+}, [confirmModal.open]);
 
 const filteredUsers = useMemo(() => {
   const term = search.trim().toLowerCase();
@@ -703,46 +716,48 @@ const handleToggleActive = async (targetUser) => {
             </div>
         )}
 
-              {confirmModal.open && (
-        <div className="modal-overlay" onClick={closeConfirmModal}>
-          <div
-            className="confirm-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="confirm-modal-header">
-              <h3>{confirmModal.title}</h3>
-            </div>
-
-            <div className="confirm-modal-body">
-              <p>{confirmModal.message}</p>
-            </div>
-
-            <div className="confirm-modal-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={closeConfirmModal}
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className={`btn ${
-                  confirmModal.confirmVariant === "danger"
-                    ? "btn-danger"
-                    : "btn-primary"
-                }`}
-                onClick={handleConfirmAction}
-                disabled={submitting}
-              >
-                {confirmModal.confirmText}
-              </button>
-            </div>
-          </div>
+{confirmModal.open &&
+  createPortal(
+    <div className="modal-overlay" onClick={closeConfirmModal}>
+      <div
+        className="confirm-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="confirm-modal-header">
+          <h3>{confirmModal.title}</h3>
         </div>
-      )}
+
+        <div className="confirm-modal-body">
+          <p>{confirmModal.message}</p>
+        </div>
+
+        <div className="confirm-modal-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={closeConfirmModal}
+            disabled={submitting}
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            className={`btn ${
+              confirmModal.confirmVariant === "danger"
+                ? "btn-danger"
+                : "btn-primary"
+            }`}
+            onClick={handleConfirmAction}
+            disabled={submitting}
+          >
+            {confirmModal.confirmText}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )}
     </div>
   );
 }
