@@ -180,3 +180,133 @@ def test_cannot_reactivate_already_active_user(client, db, create_user, create_r
 
     assert response.status_code == 400
     assert response.json()["detail"] == "User is already active"
+
+
+def test_admin_can_change_another_users_role(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+
+    admin = create_user(db, role=admin_role, label="admin")
+    target_user = create_user(db, role=junior_role, label="target")
+
+    login_user(admin)
+
+    response = client.patch(
+        f"/users/{target_user.id}/role",
+        json={"role_id": senior_role.id},
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["id"] == target_user.id
+    assert data["role"]["name"] == "senior"
+
+
+def test_regular_user_cannot_change_user_role(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    mid_role = create_role(db, "mid", level=3)
+    senior_role = create_role(db, "senior", level=5)
+
+    user1 = create_user(db, role=mid_role, label="user1")
+    user2 = create_user(db, role=mid_role, label="user2")
+    create_user(db, role=admin_role, label="admin")
+
+    login_user(user1)
+
+    response = client.patch(
+        f"/users/{user2.id}/role",
+        json={"role_id": senior_role.id},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only admin can change user roles"
+
+
+def test_admin_cannot_change_own_role(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    lead_role = create_role(db, "lead", level=8)
+
+    admin = create_user(db, role=admin_role, label="admin")
+
+    login_user(admin)
+
+    response = client.patch(
+        f"/users/{admin.id}/role",
+        json={"role_id": lead_role.id},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "You cannot change your own role"
+
+
+def test_cannot_change_role_to_invalid_role_id(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    junior_role = create_role(db, "junior", level=1)
+
+    admin = create_user(db, role=admin_role, label="admin")
+    target_user = create_user(db, role=junior_role, label="target")
+
+    login_user(admin)
+
+    response = client.patch(
+        f"/users/{target_user.id}/role",
+        json={"role_id": 999999},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid role_id"
+
+
+def test_cannot_change_role_to_same_role(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    senior_role = create_role(db, "senior", level=5)
+
+    admin = create_user(db, role=admin_role, label="admin")
+    target_user = create_user(db, role=senior_role, label="target")
+
+    login_user(admin)
+
+    response = client.patch(
+        f"/users/{target_user.id}/role",
+        json={"role_id": senior_role.id},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "User already has this role"
+
+
+def test_admin_can_view_user_details(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    junior_role = create_role(db, "junior", level=1)
+
+    admin = create_user(db, role=admin_role, label="admin")
+    target_user = create_user(db, role=junior_role, label="target")
+
+    login_user(admin)
+
+    response = client.get(f"/users/{target_user.id}/details")
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["id"] == target_user.id
+    assert "stats" in data
+    assert "total_requests_created" in data["stats"]
+    assert "total_requests_approved" in data["stats"]
+    assert "total_requests_rejected" in data["stats"]
+
+
+def test_regular_user_cannot_view_user_details(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    mid_role = create_role(db, "mid", level=3)
+
+    create_user(db, role=admin_role, label="admin")
+    user1 = create_user(db, role=mid_role, label="user1")
+    user2 = create_user(db, role=mid_role, label="user2")
+
+    login_user(user1)
+
+    response = client.get(f"/users/{user2.id}/details")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only admin can view user details"

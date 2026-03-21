@@ -10,6 +10,9 @@ class UserCreate(BaseModel):
     password: str
     role_id: int
 
+class UserRoleUpdate(BaseModel):
+    role_id: int
+
 
 class UserResponse(BaseModel):
     id: int
@@ -27,5 +30,23 @@ class UserShortResponse(BaseModel):
     full_name: str
     email: EmailStr
     role: RoleResponse
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserStatsResponse(BaseModel):
+    total_requests_created: int
+    total_requests_approved: int
+    total_requests_rejected: int
+
+
+class UserDetailsResponse(BaseModel):
+    id: int
+    full_name: str
+    email: EmailStr
+    role: RoleResponse
+    is_active: bool
+    created_at: datetime
+    stats: UserStatsResponse
 
     model_config = ConfigDict(from_attributes=True)

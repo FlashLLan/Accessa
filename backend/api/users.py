@@ -6,8 +6,18 @@ from backend.models.user import User
 from backend.models.role import Role
 from backend.core.dependencies import get_current_user, can_create_role
 from backend.core.security import hash_password
-from backend.schemas.user import UserCreate, UserResponse, UserShortResponse
 from backend.services.audit_service import log_action
+from sqlalchemy import func
+from backend.models.change_request import ChangeRequest
+from backend.models.approval import Approval
+from backend.models.enums import RequestStatus
+from backend.schemas.user import (
+    UserCreate,
+    UserResponse,
+    UserShortResponse,
+    UserRoleUpdate,
+    UserDetailsResponse,
+)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -177,3 +187,96 @@ def reactivate_user(
     db.commit()
 
     return user
+
+@router.patch("/{user_id}/role", response_model=UserResponse)
+def update_user_role(
+    user_id: int,
+    payload: UserRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can change user roles")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own role")
+
+    new_role = db.query(Role).filter(Role.id == payload.role_id).first()
+    if not new_role:
+        raise HTTPException(status_code=400, detail="Invalid role_id")
+
+    old_role_name = user.role.name
+
+    if old_role_name == new_role.name:
+        raise HTTPException(status_code=400, detail="User already has this role")
+
+    user.role_id = new_role.id
+    db.commit()
+    db.refresh(user)
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update_user_role",
+        entity_type="user",
+        entity_id=user.id,
+        details=f"Changed role for '{user.email}' from '{old_role_name}' to '{new_role.name}'"
+    )
+    db.commit()
+
+    return user
+
+@router.get("/{user_id}/details", response_model=UserDetailsResponse)
+def get_user_details(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can view user details")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    total_requests_created = (
+        db.query(func.count(ChangeRequest.id))
+        .filter(ChangeRequest.created_by == user.id)
+        .scalar()
+    )
+
+    total_requests_approved = (
+        db.query(func.count(Approval.id))
+        .filter(
+            Approval.reviewer_id == user.id,
+            Approval.decision == RequestStatus.APPROVED
+        )
+        .scalar()
+    )
+
+    total_requests_rejected = (
+        db.query(func.count(Approval.id))
+        .filter(
+            Approval.reviewer_id == user.id,
+            Approval.decision == RequestStatus.REJECTED
+        )
+        .scalar()
+    )
+
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+        "stats": {
+            "total_requests_created": total_requests_created or 0,
+            "total_requests_approved": total_requests_approved or 0,
+            "total_requests_rejected": total_requests_rejected or 0,
+        },
+    }
