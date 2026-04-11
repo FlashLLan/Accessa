@@ -82,7 +82,8 @@ def test_reviewer_list_endpoint(client, db, create_user, create_role, login_user
     data = response.json()
     ids = [u["id"] for u in data]
 
-    assert admin.id in ids
+    # The current user (admin) is excluded from the list — you cannot assign yourself
+    assert admin.id not in ids
     assert reviewer.id in ids
 
 

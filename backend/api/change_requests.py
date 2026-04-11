@@ -4,6 +4,7 @@ from backend.models.enums import RequestStatus, ApprovalDecision, RiskLevel
 from database.db import get_db
 from backend.models.change_request import ChangeRequest
 from backend.models.user import User
+from backend.models.role import Role
 from backend.models.approval import Approval
 from backend.schemas.change_request import (
     ChangeRequestCreate,
@@ -14,27 +15,29 @@ from backend.schemas.change_request import (
 )
 from backend.core.dependencies import get_current_user
 from backend.services.audit_service import log_action
+from backend.services.approval_service import can_user_decide_request
 from backend.models.comment import Comment
 from backend.schemas.comment import CommentCreate, CommentResponse
 router = APIRouter(prefix="/change-requests", tags=["Change Requests"])
 
-REVIEWER_ROLES = {"senior", "lead", "admin"}
-HIGH_RISK_REVIEWER_ROLES = {"lead", "admin"}  # or {"admin"}
+def _get_active_admin_count(db: Session) -> int:
+    return (
+        db.query(User)
+        .join(User.role)
+        .filter(User.is_active == True, Role.name == "admin")
+        .count()
+    )
 
-def validate_reviewer_for_request(reviewer: User, risk_level: RiskLevel):
-    reviewer_role = reviewer.role.name
 
-    if reviewer_role not in REVIEWER_ROLES:
+def validate_reviewer_for_request(reviewer: User, risk_level: RiskLevel, requester_role: str):
+    from backend.services.approval_service import get_allowed_approver_roles
+    eligible_roles = get_allowed_approver_roles(requester_role, risk_level.value)
+    if reviewer.role.name not in eligible_roles:
         raise HTTPException(
             status_code=400,
-            detail="Assigned reviewer must have role senior, lead, or admin"
+            detail="Assigned reviewer is not eligible to review this type of request."
         )
 
-    if risk_level == RiskLevel.HIGH and reviewer_role not in HIGH_RISK_REVIEWER_ROLES:
-        raise HTTPException(
-            status_code=400,
-            detail="High-risk requests must be assigned to a lead or admin"
-        )
 @router.post("/", response_model=ChangeRequestResponse)
 def create_change_request(
     request_data: ChangeRequestCreate,
@@ -48,7 +51,7 @@ def create_change_request(
     if reviewer.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot assign yourself as reviewer")
 
-    validate_reviewer_for_request(reviewer, request_data.risk_level)
+    validate_reviewer_for_request(reviewer, request_data.risk_level, current_user.role.name)
 
     new_request = ChangeRequest(
         title=request_data.title,
@@ -126,14 +129,23 @@ def approve_change_request(
     if not change_request:
         raise HTTPException(status_code=404, detail="Change request not found")
 
-    if current_user.role.name != "admin" and change_request.assigned_reviewer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can approve this request")
+    active_admin_count = None
+    if change_request.creator.role.name == "admin":
+        active_admin_count = _get_active_admin_count(db)
 
-    if change_request.created_by == current_user.id:
-        raise HTTPException(status_code=403, detail="You cannot approve your own request")
+    allowed, reason = can_user_decide_request(current_user, change_request, active_admin_count)
 
-    if change_request.status != RequestStatus.PENDING_REVIEW:
-        raise HTTPException(status_code=400, detail="Only pending requests can be approved")
+    if not allowed:
+        if reason == "not_pending":
+            raise HTTPException(status_code=400, detail="Only pending requests can be approved")
+        if reason == "self_approval":
+            raise HTTPException(status_code=403, detail="You cannot approve your own request")
+        if reason == "admin_insufficient_admins":
+            raise HTTPException(
+                status_code=400,
+                detail="Admin request workflow requires at least two active admins."
+            )
+        raise HTTPException(status_code=403, detail="You are not allowed to approve this request.")
 
     approval = Approval(
         change_request_id=change_request.id,
@@ -153,7 +165,12 @@ def approve_change_request(
         action="approve_change_request",
         entity_type="change_request",
         entity_id=change_request.id,
-        details=action.decision_comment or "Approved without comment"
+        details=(
+            f"Approved | approver_role={current_user.role.name} | "
+            f"requester_role={change_request.creator.role.name} | "
+            f"severity={change_request.risk_level.value} | "
+            f"comment={action.decision_comment or 'none'}"
+        )
     )
     db.commit()
 
@@ -172,14 +189,23 @@ def reject_change_request(
     if not change_request:
         raise HTTPException(status_code=404, detail="Change request not found")
 
-    if current_user.role.name != "admin" and change_request.assigned_reviewer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can reject this request")
+    active_admin_count = None
+    if change_request.creator.role.name == "admin":
+        active_admin_count = _get_active_admin_count(db)
 
-    if change_request.created_by == current_user.id:
-        raise HTTPException(status_code=403, detail="You cannot reject your own request")
+    allowed, reason = can_user_decide_request(current_user, change_request, active_admin_count)
 
-    if change_request.status != RequestStatus.PENDING_REVIEW:
-        raise HTTPException(status_code=400, detail="Only pending requests can be rejected")
+    if not allowed:
+        if reason == "not_pending":
+            raise HTTPException(status_code=400, detail="Only pending requests can be rejected")
+        if reason == "self_approval":
+            raise HTTPException(status_code=403, detail="You cannot reject your own request")
+        if reason == "admin_insufficient_admins":
+            raise HTTPException(
+                status_code=400,
+                detail="Admin request workflow requires at least two active admins."
+            )
+        raise HTTPException(status_code=403, detail="You are not allowed to reject this request.")
 
     approval = Approval(
         change_request_id=change_request.id,
@@ -199,7 +225,12 @@ def reject_change_request(
         action="reject_change_request",
         entity_type="change_request",
         entity_id=change_request.id,
-        details=action.decision_comment or "Rejected without comment"
+        details=(
+            f"Rejected | approver_role={current_user.role.name} | "
+            f"requester_role={change_request.creator.role.name} | "
+            f"severity={change_request.risk_level.value} | "
+            f"comment={action.decision_comment or 'none'}"
+        )
     )
     db.commit()
 
@@ -265,10 +296,14 @@ def update_change_request(
             if request_data.risk_level is not None
             else change_request.risk_level
         )
-        validate_reviewer_for_request(reviewer, new_risk_level)
+        validate_reviewer_for_request(reviewer, new_risk_level, change_request.creator.role.name)
 
     if request_data.assigned_reviewer_id is None and request_data.risk_level is not None:
-        validate_reviewer_for_request(change_request.assigned_reviewer, request_data.risk_level)
+        validate_reviewer_for_request(
+            change_request.assigned_reviewer,
+            request_data.risk_level,
+            change_request.creator.role.name,
+        )
 
 
     update_data = request_data.model_dump(exclude_unset=True)

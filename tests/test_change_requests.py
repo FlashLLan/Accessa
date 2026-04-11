@@ -177,6 +177,7 @@ def seed_change_request(
     reviewer_id,
     status=RequestStatus.DRAFT,
     title="Seeded request",
+    risk_level=RiskLevel.LOW,
 ):
     req = ChangeRequest(
         title=title,
@@ -184,7 +185,7 @@ def seed_change_request(
         request_type=next(iter(RequestType)),
         target_system="server-1",
         environment=next(iter(EnvironmentType)),
-        risk_level=next(iter(RiskLevel)),
+        risk_level=risk_level,
         status=status,
         created_by=creator_id,
         assigned_reviewer_id=reviewer_id,
@@ -661,62 +662,67 @@ def test_creator_cannot_approve_own_request_even_if_assigned_as_reviewer(
     assert response.json()["detail"] == "You cannot approve your own request"
 
 
-def test_non_assigned_reviewer_cannot_approve_request(
+def test_role_eligible_non_assigned_reviewer_can_approve_request(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
+    # Approval is now matrix-based: any eligible role may approve, not just the assigned reviewer.
+    # junior + low allows: mid, senior, lead — so a lead who is not the assigned reviewer may approve.
     junior_role = create_role(db, "junior", level=1)
     senior_role = create_role(db, "senior", level=5)
     lead_role = create_role(db, "lead", level=8)
 
     creator = create_user(db, role=junior_role, label="junior")
     assigned_reviewer = create_user(db, role=senior_role, label="senior")
-    other_reviewer = create_user(db, role=lead_role, label="lead")
+    other_lead = create_user(db, role=lead_role, label="lead")
 
     req = seed_change_request(
         db,
         creator_id=creator.id,
         reviewer_id=assigned_reviewer.id,
         status=RequestStatus.PENDING_REVIEW,
+        risk_level=RiskLevel.LOW,
     )
 
-    login_user(other_reviewer)
+    login_user(other_lead)
 
     response = client.post(
         f"/change-requests/{req.id}/approve",
-        json={"decision_comment": "I am not assigned"},
+        json={"decision_comment": "Approved by eligible lead"},
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Only the assigned reviewer or admin can approve this request"
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == RequestStatus.APPROVED.value
 
 
-def test_non_assigned_reviewer_cannot_reject_request(
+def test_role_eligible_non_assigned_reviewer_can_reject_request(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
+    # Same as above but for rejection.
     junior_role = create_role(db, "junior", level=1)
     senior_role = create_role(db, "senior", level=5)
     lead_role = create_role(db, "lead", level=8)
 
     creator = create_user(db, role=junior_role, label="junior")
     assigned_reviewer = create_user(db, role=senior_role, label="senior")
-    other_reviewer = create_user(db, role=lead_role, label="lead")
+    other_lead = create_user(db, role=lead_role, label="lead")
 
     req = seed_change_request(
         db,
         creator_id=creator.id,
         reviewer_id=assigned_reviewer.id,
         status=RequestStatus.PENDING_REVIEW,
+        risk_level=RiskLevel.LOW,
     )
 
-    login_user(other_reviewer)
+    login_user(other_lead)
 
     response = client.post(
         f"/change-requests/{req.id}/reject",
-        json={"decision_comment": "I am not assigned"},
+        json={"decision_comment": "Rejected by eligible lead"},
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Only the assigned reviewer or admin can reject this request"
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == RequestStatus.REJECTED.value
 
 
 def test_rejected_request_can_be_updated_and_resubmitted(
@@ -761,3 +767,606 @@ def test_rejected_request_can_be_updated_and_resubmitted(
     assert submit_response.status_code == 200, submit_response.text
     submit_data = submit_response.json()
     assert submit_data["status"] == RequestStatus.PENDING_REVIEW.value
+
+
+# ---------------------------------------------------------------------------
+# Approval matrix tests — spec cases 1-35
+# ---------------------------------------------------------------------------
+#
+# Helpers shared across matrix tests
+# ---------------------------------------------------------------------------
+
+from backend.services.approval_service import get_allowed_approver_roles, can_user_decide_request
+
+
+def _make_pending_request(db, *, creator, reviewer, risk_level=RiskLevel.LOW):
+    """Seed a PENDING_REVIEW request directly into the DB."""
+    return seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.PENDING_REVIEW,
+        risk_level=risk_level,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Allowed cases (1-18)
+# ---------------------------------------------------------------------------
+
+def test_matrix_case_01_mid_can_approve_junior_low(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    mid_role = create_role(db, "mid", level=2)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=mid_role, label="mid")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == RequestStatus.APPROVED.value
+
+
+def test_matrix_case_02_senior_can_approve_junior_low(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=3)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_03_senior_can_approve_junior_medium(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.MEDIUM)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_04_senior_can_approve_junior_high(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_05_lead_can_approve_junior_high(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    approver = create_user(db, role=lead_role, label="lead")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_06_senior_can_approve_mid_low(
+    client, db, create_user, create_role, login_user
+):
+    mid_role = create_role(db, "mid", level=2)
+    senior_role = create_role(db, "senior", level=3)
+
+    creator = create_user(db, role=mid_role, label="mid")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_07_senior_can_approve_mid_medium(
+    client, db, create_user, create_role, login_user
+):
+    mid_role = create_role(db, "mid", level=2)
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=mid_role, label="mid")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.MEDIUM)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_08_senior_can_approve_mid_high(
+    client, db, create_user, create_role, login_user
+):
+    mid_role = create_role(db, "mid", level=2)
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=mid_role, label="mid")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_09_lead_can_approve_mid_high(
+    client, db, create_user, create_role, login_user
+):
+    mid_role = create_role(db, "mid", level=2)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=mid_role, label="mid")
+    approver = create_user(db, role=lead_role, label="lead")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_10_senior_can_approve_another_senior_low(
+    client, db, create_user, create_role, login_user
+):
+    senior_role = create_role(db, "senior", level=3)
+
+    creator = create_user(db, role=senior_role, label="senior_creator")
+    approver = create_user(db, role=senior_role, label="senior_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_11_senior_can_approve_another_senior_medium(
+    client, db, create_user, create_role, login_user
+):
+    senior_role = create_role(db, "senior", level=3)
+
+    creator = create_user(db, role=senior_role, label="senior_creator")
+    approver = create_user(db, role=senior_role, label="senior_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.MEDIUM)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_12_lead_can_approve_senior_high(
+    client, db, create_user, create_role, login_user
+):
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=senior_role, label="senior")
+    approver = create_user(db, role=lead_role, label="lead")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_13_lead_can_approve_another_lead_low(
+    client, db, create_user, create_role, login_user
+):
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=lead_role, label="lead_creator")
+    approver = create_user(db, role=lead_role, label="lead_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_14_lead_can_approve_another_lead_medium(
+    client, db, create_user, create_role, login_user
+):
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=lead_role, label="lead_creator")
+    approver = create_user(db, role=lead_role, label="lead_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.MEDIUM)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_15_lead_can_approve_another_lead_high(
+    client, db, create_user, create_role, login_user
+):
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=lead_role, label="lead_creator")
+    approver = create_user(db, role=lead_role, label="lead_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_16_admin_can_approve_another_admin_low_with_two_admins(
+    client, db, create_user, create_role, login_user
+):
+    admin_role = create_role(db, "admin", level=5)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=admin_role, label="admin_creator")
+    approver = create_user(db, role=admin_role, label="admin_approver")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_17_admin_can_approve_another_admin_medium_with_two_admins(
+    client, db, create_user, create_role, login_user
+):
+    admin_role = create_role(db, "admin", level=5)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=admin_role, label="admin_creator")
+    approver = create_user(db, role=admin_role, label="admin_approver")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.MEDIUM)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+def test_matrix_case_18_admin_can_approve_another_admin_high_with_two_admins(
+    client, db, create_user, create_role, login_user
+):
+    admin_role = create_role(db, "admin", level=5)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=admin_role, label="admin_creator")
+    approver = create_user(db, role=admin_role, label="admin_approver")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 200, r.text
+
+
+# ---------------------------------------------------------------------------
+# Forbidden cases (19-30)
+# ---------------------------------------------------------------------------
+
+def test_matrix_case_19_mid_cannot_approve_junior_medium(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    mid_role = create_role(db, "mid", level=2)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=mid_role, label="mid")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.MEDIUM)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You are not allowed to approve this request."
+
+
+def test_matrix_case_20_mid_cannot_approve_junior_high(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    mid_role = create_role(db, "mid", level=2)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=mid_role, label="mid")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You are not allowed to approve this request."
+
+
+def test_matrix_case_21_mid_cannot_approve_mid_requests(
+    client, db, create_user, create_role, login_user
+):
+    mid_role = create_role(db, "mid", level=2)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=mid_role, label="mid_creator")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=mid_role, label="mid_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You are not allowed to approve this request."
+
+
+def test_matrix_case_22_senior_cannot_approve_own_request(
+    client, db, create_user, create_role, login_user
+):
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=senior_role, label="senior")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(creator)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You cannot approve your own request"
+
+
+def test_matrix_case_23_senior_cannot_approve_another_senior_high(
+    client, db, create_user, create_role, login_user
+):
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=senior_role, label="senior_creator")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=senior_role, label="senior_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You are not allowed to approve this request."
+
+
+def test_matrix_case_24_lead_cannot_approve_own_request(
+    client, db, create_user, create_role, login_user
+):
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=lead_role, label="lead_creator")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead_reviewer")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(creator)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You cannot approve your own request"
+
+
+def test_matrix_case_25_admin_cannot_approve_non_admin_requests(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    admin_role = create_role(db, "admin", level=5)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=admin_role, label="admin")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You are not allowed to approve this request."
+
+
+def test_matrix_case_26_non_admin_cannot_approve_admin_requests(
+    client, db, create_user, create_role, login_user
+):
+    admin_role = create_role(db, "admin", level=5)
+    senior_role = create_role(db, "senior", level=3)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=admin_role, label="admin_creator")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=senior_role, label="senior")
+    # Second admin needed so the admin count check doesn't fire first
+    create_user(db, role=admin_role, label="admin2")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You are not allowed to approve this request."
+
+
+def test_matrix_case_27_admin_cannot_approve_own_admin_request(
+    client, db, create_user, create_role, login_user
+):
+    admin_role = create_role(db, "admin", level=5)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=admin_role, label="admin_creator")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    # Second admin so count >= 2
+    create_user(db, role=admin_role, label="admin2")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(creator)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You cannot approve your own request"
+
+
+def test_matrix_case_28_junior_cannot_approve_anything(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=junior_role, label="junior_creator")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+    approver = create_user(db, role=junior_role, label="junior_approver")
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "You are not allowed to approve this request."
+
+
+def test_matrix_case_29_cannot_approve_already_approved_request(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=3)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=approver.id,
+        status=RequestStatus.APPROVED,
+        risk_level=RiskLevel.LOW,
+    )
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Only pending requests can be approved"
+
+
+def test_matrix_case_30_cannot_reject_already_rejected_request(
+    client, db, create_user, create_role, login_user
+):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=3)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    approver = create_user(db, role=senior_role, label="senior")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=approver.id,
+        status=RequestStatus.REJECTED,
+        risk_level=RiskLevel.LOW,
+    )
+    login_user(approver)
+
+    r = client.post(f"/change-requests/{req.id}/reject", json={})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Only pending requests can be rejected"
+
+
+# ---------------------------------------------------------------------------
+# Workflow edge cases (31-35)
+# ---------------------------------------------------------------------------
+
+def test_matrix_case_31_admin_workflow_fails_when_fewer_than_two_active_admins(
+    client, db, create_user, create_role, login_user
+):
+    admin_role = create_role(db, "admin", level=5)
+    lead_role = create_role(db, "lead", level=4)
+
+    creator = create_user(db, role=admin_role, label="admin_creator")
+    approver = create_user(db, role=admin_role, label="admin_approver")
+    dummy_reviewer = create_user(db, role=lead_role, label="lead")
+
+    # Deactivate approver so only 1 active admin remains
+    approver.is_active = False
+    db.commit()
+
+    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    login_user(approver)  # auth override bypasses is_active check
+
+    r = client.post(f"/change-requests/{req.id}/approve", json={})
+    assert r.status_code == 400
+    assert "at least two active admins" in r.json()["detail"]
+
+
+def test_matrix_case_32_unsupported_requester_role_rejected_safely():
+    # Unit test for the helper — no DB needed.
+    result = get_allowed_approver_roles("contractor", "low")
+    assert result == []
+
+
+def test_matrix_case_33_invalid_severity_rejected_safely():
+    result = get_allowed_approver_roles("junior", "extreme")
+    assert result == []
+
+
+def test_matrix_case_34_missing_severity_rejected_safely():
+    result = get_allowed_approver_roles("junior", "")
+    assert result == []
+
+
+def test_matrix_case_35_missing_requester_role_rejected_safely():
+    result = get_allowed_approver_roles("", "low")
+    assert result == []

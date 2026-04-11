@@ -121,12 +121,16 @@ def test_regular_user_cannot_view_audit_logs(client, db, create_user, create_rol
     assert response.json()["detail"] == "Only admin can view audit logs"
 
 
-def test_high_risk_request_requires_high_level_reviewer_on_create(client, db, create_user, create_role, login_user):
+def test_high_risk_request_rejects_ineligible_reviewer_on_create(client, db, create_user, create_role, login_user):
+    # junior + high allows ["senior", "lead"] — mid is not eligible.
     junior_role = create_role(db, "junior", level=1)
-    senior_role = create_role(db, "senior", level=5)
+    mid_role = create_role(db, "mid", level=2)
+    lead_role = create_role(db, "lead", level=4)
 
     creator = create_user(db, role=junior_role, label="junior")
-    low_reviewer = create_user(db, role=senior_role, label="lowreviewer")
+    mid_reviewer = create_user(db, role=mid_role, label="mid")
+    # lead exists so reviewer list is non-empty (avoids unrelated setup issues)
+    create_user(db, role=lead_role, label="lead")
 
     login_user(creator)
 
@@ -139,20 +143,21 @@ def test_high_risk_request_requires_high_level_reviewer_on_create(client, db, cr
             "target_system": "fw-router",
             "environment": "production",
             "risk_level": "high",
-            "assigned_reviewer_id": low_reviewer.id,
+            "assigned_reviewer_id": mid_reviewer.id,
         },
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "High-risk requests must be assigned to a lead or admin"
+    assert response.json()["detail"] == "Assigned reviewer is not eligible to review this type of request."
 
 
-def test_high_risk_request_allows_admin_reviewer_on_create(client, db, create_user, create_role, login_user):
+def test_high_risk_request_allows_eligible_reviewer_on_create(client, db, create_user, create_role, login_user):
+    # junior + high allows ["senior", "lead"] — lead is eligible.
     junior_role = create_role(db, "junior", level=1)
-    admin_role = create_role(db, "admin", level=10)
+    lead_role = create_role(db, "lead", level=4)
 
     creator = create_user(db, role=junior_role, label="junior")
-    admin = create_user(db, role=admin_role, label="admin")
+    lead_reviewer = create_user(db, role=lead_role, label="lead")
 
     login_user(creator)
 
@@ -165,27 +170,30 @@ def test_high_risk_request_allows_admin_reviewer_on_create(client, db, create_us
             "target_system": "fw-router",
             "environment": "production",
             "risk_level": "high",
-            "assigned_reviewer_id": admin.id,
+            "assigned_reviewer_id": lead_reviewer.id,
         },
     )
 
     assert response.status_code == 200, response.text
-    data = response.json()
-    assert data["risk_level"] == "high"
+    assert response.json()["risk_level"] == "high"
 
 
-def test_update_to_high_risk_fails_with_low_level_reviewer(client, db, create_user, create_role, login_user, seed_change_request):
+def test_update_to_high_risk_fails_with_ineligible_reviewer(client, db, create_user, create_role, login_user, seed_change_request):
+    # Seed a junior+low request with a mid reviewer (mid is valid for junior+low).
+    # Changing risk to high should fail because mid is not in ["senior", "lead"] for junior+high.
+    from backend.models.enums import RiskLevel as RL
     junior_role = create_role(db, "junior", level=1)
-    senior_role = create_role(db, "senior", level=5)
+    mid_role = create_role(db, "mid", level=2)
 
     creator = create_user(db, role=junior_role, label="junior")
-    reviewer = create_user(db, role=senior_role, label="senior")
+    mid_reviewer = create_user(db, role=mid_role, label="mid")
 
     req = seed_change_request(
         db,
         creator_id=creator.id,
-        reviewer_id=reviewer.id,
+        reviewer_id=mid_reviewer.id,
         status=RequestStatus.DRAFT,
+        risk_level=RL.LOW,
     )
 
     login_user(creator)
@@ -196,4 +204,4 @@ def test_update_to_high_risk_fails_with_low_level_reviewer(client, db, create_us
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "High-risk requests must be assigned to a lead or admin"
+    assert response.json()["detail"] == "Assigned reviewer is not eligible to review this type of request."

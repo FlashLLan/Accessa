@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users";
+import { useAuth } from "../hooks/useAuth";
 
 const initialForm = {
   title: "",
@@ -15,6 +16,7 @@ const initialForm = {
 
 export default function CreateRequestPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [form, setForm] = useState(initialForm);
   const [reviewers, setReviewers] = useState([]);
@@ -28,7 +30,7 @@ export default function CreateRequestPage() {
       try {
         setIsLoadingReviewers(true);
         setError("");
-        const data = await getReviewers();
+        const data = await getReviewers(user?.role, form.risk_level);
         setReviewers(data);
       } catch (err) {
         console.error("Failed to load reviewers", err);
@@ -41,8 +43,8 @@ export default function CreateRequestPage() {
       }
     }
 
-    loadReviewers();
-  }, []);
+    if (user?.role) loadReviewers();
+  }, [user?.role, form.risk_level]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -50,6 +52,8 @@ export default function CreateRequestPage() {
     setForm((prev) => ({
       ...prev,
       [name]: value,
+      // Clear the reviewer selection when risk level changes — the eligible list will update
+      ...(name === "risk_level" ? { assigned_reviewer_id: "" } : {}),
     }));
   };
 

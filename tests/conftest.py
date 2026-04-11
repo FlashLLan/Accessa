@@ -166,6 +166,7 @@ def seed_change_request():
         reviewer_id,
         status=RequestStatus.DRAFT,
         title="Seeded request",
+        risk_level=RiskLevel.LOW,
     ):
         req = ChangeRequest(
             title=title,
@@ -173,7 +174,7 @@ def seed_change_request():
             request_type=next(iter(RequestType)),
             target_system="server-1",
             environment=next(iter(EnvironmentType)),
-            risk_level=next(iter(RiskLevel)),
+            risk_level=risk_level,
             status=status,
             created_by=creator_id,
             assigned_reviewer_id=reviewer_id,

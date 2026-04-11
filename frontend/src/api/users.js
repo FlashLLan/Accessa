@@ -10,8 +10,11 @@ export async function getRoles() {
   return response.data;
 }
 
-export async function getReviewers() {
-  const response = await client.get("/users/reviewers");
+export async function getReviewers(requesterRole, riskLevel) {
+  const params = {};
+  if (requesterRole) params.requester_role = requesterRole;
+  if (riskLevel) params.risk_level = riskLevel;
+  const response = await client.get("/users/reviewers", { params });
   return response.data;
 }
 

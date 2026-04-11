@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -40,15 +40,28 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.get("/reviewers", response_model=list[UserShortResponse])
 def list_reviewers(
+    requester_role: str | None = Query(None),
+    risk_level: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from backend.services.approval_service import get_allowed_approver_roles
+
+    if requester_role and risk_level:
+        eligible_roles = get_allowed_approver_roles(requester_role, risk_level)
+        if not eligible_roles:
+            return []
+        role_filter = Role.name.in_(eligible_roles)
+    else:
+        role_filter = Role.name.in_(["admin", "senior", "lead"])
+
     reviewers = (
         db.query(User)
         .join(Role)
         .filter(
             User.is_active == True,
-            Role.name.in_(["admin", "senior", "lead"])
+            User.id != current_user.id,
+            role_filter,
         )
         .all()
     )
