@@ -1,3 +1,25 @@
+const APPROVAL_MATRIX = {
+  "junior,low":    ["mid", "senior", "lead"],
+  "junior,medium": ["senior", "lead"],
+  "junior,high":   ["senior", "lead"],
+  "mid,low":       ["senior", "lead"],
+  "mid,medium":    ["senior", "lead"],
+  "mid,high":      ["senior", "lead"],
+  "senior,low":    ["senior", "lead"],
+  "senior,medium": ["senior", "lead"],
+  "senior,high":   ["lead"],
+  "lead,low":      ["lead"],
+  "lead,medium":   ["lead"],
+  "lead,high":     ["lead"],
+  "admin,low":     ["admin"],
+  "admin,medium":  ["admin"],
+  "admin,high":    ["admin"],
+};
+
+function getAllowedApproverRoles(requesterRole, riskLevel) {
+  return APPROVAL_MATRIX[`${requesterRole},${riskLevel}`] || [];
+}
+
 export function isRequestCreator(user, request) {
   if (!user?.email || !request?.creator?.email) return false;
   return user.email.toLowerCase() === request.creator.email.toLowerCase();
@@ -22,11 +44,16 @@ export function canSubmitRequest(user, request) {
 }
 
 export function canReviewRequest(user, request) {
-  return (
-    request?.status === "pending_review" &&
-    !isRequestCreator(user, request) &&
-    (isAdmin(user) || isAssignedReviewer(user, request))
-  );
+  if (request?.status !== "pending_review") return false;
+  if (isRequestCreator(user, request)) return false;
+
+  const requesterRole = request?.creator?.role?.name;
+  const riskLevel = request?.risk_level;
+  const userRole = user?.role;
+
+  if (!requesterRole || !riskLevel || !userRole) return false;
+
+  return getAllowedApproverRoles(requesterRole, riskLevel).includes(userRole);
 }
 
 export function canApproveRequest(user, request) {

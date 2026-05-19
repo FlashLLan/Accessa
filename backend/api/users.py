@@ -10,7 +10,7 @@ from backend.services.audit_service import log_action
 from sqlalchemy import func
 from backend.models.change_request import ChangeRequest
 from backend.models.approval import Approval
-from backend.models.enums import RequestStatus
+from backend.models.enums import RequestStatus, ApprovalDecision
 from backend.schemas.user import (
     UserCreate,
     UserResponse,
@@ -53,7 +53,7 @@ def list_reviewers(
             return []
         role_filter = Role.name.in_(eligible_roles)
     else:
-        role_filter = Role.name.in_(["admin", "senior", "lead"])
+        role_filter = Role.name.in_(["mid", "senior", "lead"])
 
     reviewers = (
         db.query(User)
@@ -266,7 +266,7 @@ def get_user_details(
         db.query(func.count(Approval.id))
         .filter(
             Approval.reviewer_id == user.id,
-            Approval.decision == RequestStatus.APPROVED
+            Approval.decision == ApprovalDecision.APPROVED
         )
         .scalar()
     )
@@ -275,7 +275,7 @@ def get_user_details(
         db.query(func.count(Approval.id))
         .filter(
             Approval.reviewer_id == user.id,
-            Approval.decision == RequestStatus.REJECTED
+            Approval.decision == ApprovalDecision.REJECTED
         )
         .scalar()
     )
