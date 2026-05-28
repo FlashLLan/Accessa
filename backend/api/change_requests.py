@@ -88,13 +88,13 @@ def list_change_requests(
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role.name == "admin":
-        return db.query(ChangeRequest).all()
+        return db.query(ChangeRequest).order_by(ChangeRequest.created_at.desc()).all()
 
     return db.query(ChangeRequest).filter(
         (ChangeRequest.created_by == current_user.id) |
         (ChangeRequest.assigned_reviewer_id == current_user.id) |
         (ChangeRequest.current_reviewer_id == current_user.id)
-    ).all()
+    ).order_by(ChangeRequest.created_at.desc()).all()
 
 
 @router.get("/{request_id}", response_model=ChangeRequestResponse)

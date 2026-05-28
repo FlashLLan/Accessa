@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users.js";
 import { useAuth } from "../hooks/useAuth";
@@ -21,6 +21,7 @@ import {
 
 export default function RequestDetailsPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [request, setRequest] = useState(null);
@@ -64,9 +65,11 @@ export default function RequestDetailsPage() {
           requestData.creator?.role?.name,
           requestData.risk_level,
         ).catch(() => []);
+        const pastActorIds = reviewActionsData.map(a => a.actor?.id).filter(Boolean);
         const excluded = new Set([
           requestData.assigned_reviewer?.id,
           requestData.current_reviewer?.id,
+          ...pastActorIds,
         ].filter(Boolean));
         setAvailableReviewers(reviewers.filter(r => !excluded.has(r.id)));
       }
@@ -169,10 +172,7 @@ export default function RequestDetailsPage() {
       setError("");
       setActionMessage("");
       await requestService.escalate(id, parseInt(selectedReviewerId), transferComment);
-      setTransferComment("");
-      setSelectedReviewerId("");
-      setActionMessage("Request escalated.");
-      await loadAll();
+      navigate("/requests", { state: { message: "Request escalated." } });
     } catch (err) {
       setError(err?.response?.data?.detail || "Failed to escalate the request.");
     } finally {
@@ -190,10 +190,7 @@ export default function RequestDetailsPage() {
       setError("");
       setActionMessage("");
       await requestService.delegate(id, parseInt(selectedReviewerId), transferComment);
-      setTransferComment("");
-      setSelectedReviewerId("");
-      setActionMessage("Request delegated.");
-      await loadAll();
+      navigate("/requests", { state: { message: "Request delegated." } });
     } catch (err) {
       setError(err?.response?.data?.detail || "Failed to delegate the request.");
     } finally {

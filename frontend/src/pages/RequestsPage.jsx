@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
 import {
   formatDate,
@@ -7,9 +7,11 @@ import {
   getStatusBadgeClass,
 } from "../utils/requestPresentation";
 export default function RequestsPage() {
+  const location = useLocation();
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const flashMessage = location.state?.message || "";
 
   useEffect(() => {
     async function loadRequests() {
@@ -46,6 +48,8 @@ export default function RequestsPage() {
           New Request
         </Link>
       </div>
+
+      {flashMessage && <div className="success-banner">{flashMessage}</div>}
 
       {isLoading && <div className="empty-state">Loading requests...</div>}
 

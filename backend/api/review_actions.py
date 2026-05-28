@@ -13,6 +13,8 @@ from backend.services.audit_service import log_action
 
 router = APIRouter(prefix="/change-requests", tags=["Review Actions"])
 
+ROLE_HIERARCHY = {"junior": 0, "mid": 1, "senior": 2, "lead": 3, "admin": 4}
+
 
 class ReviewTransferPayload(BaseModel):
     target_reviewer_id: int
@@ -86,6 +88,21 @@ def escalate_request(
     if target.id == cr.assigned_reviewer_id:
         raise HTTPException(status_code=400, detail="Cannot escalate back to the original assigned reviewer")
 
+    already_handled = db.query(ReviewAction).filter(
+        ReviewAction.change_request_id == request_id,
+        ReviewAction.actor_id == target.id,
+    ).first()
+    if already_handled:
+        raise HTTPException(status_code=400, detail="Cannot escalate to a reviewer who has already handled this request")
+
+    current_level = ROLE_HIERARCHY.get(current_user.role.name, -1)
+    target_level = ROLE_HIERARCHY.get(target.role.name, -1)
+    if target_level <= current_level:
+        raise HTTPException(
+            status_code=400,
+            detail="Escalation must go to a higher role. Use delegation for the same role."
+        )
+
     from_status = cr.status.value
     cr.current_reviewer_id = target.id
 
@@ -136,6 +153,13 @@ def delegate_request(
 
     if target.id == cr.created_by:
         raise HTTPException(status_code=400, detail="Cannot delegate to the request creator")
+
+    already_handled = db.query(ReviewAction).filter(
+        ReviewAction.change_request_id == request_id,
+        ReviewAction.actor_id == target.id,
+    ).first()
+    if already_handled:
+        raise HTTPException(status_code=400, detail="Cannot delegate to a reviewer who has already handled this request")
 
     from_status = cr.status.value
     cr.assigned_reviewer_id = target.id
