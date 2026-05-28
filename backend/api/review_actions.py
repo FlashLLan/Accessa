@@ -29,7 +29,11 @@ def _get_request_or_404(request_id: int, db: Session) -> ChangeRequest:
 def _check_access(cr: ChangeRequest, current_user: User):
     if current_user.role.name == "admin":
         return
-    if cr.created_by != current_user.id and cr.assigned_reviewer_id != current_user.id:
+    if (
+        cr.created_by != current_user.id
+        and cr.assigned_reviewer_id != current_user.id
+        and cr.current_reviewer_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="Access denied")
 
 
@@ -68,16 +72,21 @@ def escalate_request(
 ):
     cr = _get_request_or_404(request_id, db)
 
-    if current_user.role.name != "admin" and cr.assigned_reviewer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can escalate")
+    if current_user.role.name != "admin":
+        if cr.assigned_reviewer_id != current_user.id and cr.current_reviewer_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can escalate")
 
     if cr.status != RequestStatus.PENDING_REVIEW:
         raise HTTPException(status_code=400, detail="Only pending requests can be escalated")
 
     target = _get_target_reviewer(payload.target_reviewer_id, current_user, db)
 
+    if target.id == cr.created_by:
+        raise HTTPException(status_code=400, detail="Cannot escalate to the request creator")
+    if target.id == cr.assigned_reviewer_id:
+        raise HTTPException(status_code=400, detail="Cannot escalate back to the original assigned reviewer")
+
     from_status = cr.status.value
-    cr.status = RequestStatus.ESCALATED
     cr.current_reviewer_id = target.id
 
     action = ReviewAction(
@@ -86,7 +95,7 @@ def escalate_request(
         action_type=ReviewActionType.ESCALATE,
         target_reviewer_id=target.id,
         from_status=from_status,
-        to_status=RequestStatus.ESCALATED.value,
+        to_status=from_status,
         comment=payload.comment,
     )
     db.add(action)
@@ -116,13 +125,17 @@ def delegate_request(
 ):
     cr = _get_request_or_404(request_id, db)
 
-    if current_user.role.name != "admin" and cr.assigned_reviewer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can delegate")
+    if current_user.role.name != "admin":
+        if cr.assigned_reviewer_id != current_user.id and cr.current_reviewer_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can delegate")
 
-    if cr.status not in (RequestStatus.PENDING_REVIEW, RequestStatus.ESCALATED):
-        raise HTTPException(status_code=400, detail="Only pending or escalated requests can be delegated")
+    if cr.status != RequestStatus.PENDING_REVIEW:
+        raise HTTPException(status_code=400, detail="Only pending requests can be delegated")
 
     target = _get_target_reviewer(payload.target_reviewer_id, current_user, db)
+
+    if target.id == cr.created_by:
+        raise HTTPException(status_code=400, detail="Cannot delegate to the request creator")
 
     from_status = cr.status.value
     cr.assigned_reviewer_id = target.id

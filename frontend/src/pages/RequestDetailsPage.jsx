@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
+import { getReviewers } from "../api/users.js";
 import { useAuth } from "../hooks/useAuth";
 import {
   canApplyRequest,
   canApproveRequest,
+  canDelegateRequest,
+  canEscalateRequest,
   canRejectRequest,
   canSubmitRequest,
-  canViewRequestComments
+  canViewRequestComments,
 } from "../utils/requestPermissions";
 import {
   formatDate,
@@ -23,8 +26,12 @@ export default function RequestDetailsPage() {
   const [request, setRequest] = useState(null);
   const [approvals, setApprovals] = useState([]);
   const [comments, setComments] = useState([]);
+  const [reviewActions, setReviewActions] = useState([]);
+  const [availableReviewers, setAvailableReviewers] = useState([]);
   const [commentText, setCommentText] = useState("");
   const [decisionComment, setDecisionComment] = useState("");
+  const [transferComment, setTransferComment] = useState("");
+  const [selectedReviewerId, setSelectedReviewerId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -40,15 +47,29 @@ export default function RequestDetailsPage() {
       setIsLoading(true);
       setError("");
 
-      const [requestData, approvalsData, commentsData] = await Promise.all([
+      const [requestData, approvalsData, commentsData, reviewActionsData] = await Promise.all([
         requestService.getById(id),
         requestService.listApprovals(id).catch(() => []),
         requestService.listComments(id).catch(() => []),
+        requestService.listReviewActions(id).catch(() => []),
       ]);
 
       setRequest(requestData);
       setApprovals(approvalsData);
       setComments(commentsData);
+      setReviewActions(reviewActionsData);
+
+      if (requestData?.status === "pending_review") {
+        const reviewers = await getReviewers(
+          requestData.creator?.role?.name,
+          requestData.risk_level,
+        ).catch(() => []);
+        const excluded = new Set([
+          requestData.assigned_reviewer?.id,
+          requestData.current_reviewer?.id,
+        ].filter(Boolean));
+        setAvailableReviewers(reviewers.filter(r => !excluded.has(r.id)));
+      }
     } catch (err) {
       console.error("Failed to load request", err);
       setError(
@@ -138,6 +159,48 @@ export default function RequestDetailsPage() {
     }
   }
 
+  async function handleEscalate() {
+    if (!selectedReviewerId) {
+      setError("Please select a target reviewer before escalating.");
+      return;
+    }
+    try {
+      setActionLoading(true);
+      setError("");
+      setActionMessage("");
+      await requestService.escalate(id, parseInt(selectedReviewerId), transferComment);
+      setTransferComment("");
+      setSelectedReviewerId("");
+      setActionMessage("Request escalated.");
+      await loadAll();
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Failed to escalate the request.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDelegate() {
+    if (!selectedReviewerId) {
+      setError("Please select a target reviewer before delegating.");
+      return;
+    }
+    try {
+      setActionLoading(true);
+      setError("");
+      setActionMessage("");
+      await requestService.delegate(id, parseInt(selectedReviewerId), transferComment);
+      setTransferComment("");
+      setSelectedReviewerId("");
+      setActionMessage("Request delegated.");
+      await loadAll();
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Failed to delegate the request.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleAddComment(e) {
     e.preventDefault();
 
@@ -183,7 +246,10 @@ const canSubmit = canSubmitRequest(user, request);
 const canApprove = canApproveRequest(user, request);
 const canReject = canRejectRequest(user, request);
 const canApply = canApplyRequest(user, request);
+const canEscalate = canEscalateRequest(user, request);
+const canDelegate = canDelegateRequest(user, request);
 const canReview = canApprove || canReject;
+const canTransfer = canEscalate || canDelegate;
 
   return (
     <div className="page-card">
@@ -329,6 +395,62 @@ const canReview = canApprove || canReject;
         </div>
       )}
 
+      {canTransfer && (
+        <div className="details-section">
+          <h3 className="details-section-title">Escalate / Delegate</h3>
+
+          <div className="form-group" style={{ marginBottom: "14px" }}>
+            <label htmlFor="targetReviewer">Target reviewer</label>
+            <select
+              id="targetReviewer"
+              value={selectedReviewerId}
+              onChange={(e) => setSelectedReviewerId(e.target.value)}
+            >
+              <option value="">— Select reviewer —</option>
+              {availableReviewers.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.full_name || r.email} ({r.role?.name ?? "unknown"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group action-comment-box" style={{ marginBottom: "14px" }}>
+            <label htmlFor="transferComment">Comment (optional)</label>
+            <textarea
+              id="transferComment"
+              rows="2"
+              placeholder="Reason for escalating or delegating"
+              value={transferComment}
+              onChange={(e) => setTransferComment(e.target.value)}
+            />
+          </div>
+
+          <div className="page-actions">
+            {canEscalate && (
+              <button
+                className="btn btn-warning"
+                type="button"
+                onClick={handleEscalate}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Working..." : "Escalate"}
+              </button>
+            )}
+            {canDelegate && (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={handleDelegate}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Working..." : "Delegate"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="details-section">
         <h3 className="details-section-title">Comments</h3>
 
@@ -390,6 +512,32 @@ const canReview = canApprove || canReject;
           )}
         </div>
       </div>
+
+      {reviewActions.length > 0 && (
+        <div className="details-section">
+          <h3 className="details-section-title">Review Action History</h3>
+
+          <div className="timeline-list">
+            {reviewActions.map((action) => (
+              <div key={action.id} className="timeline-card">
+                <div className="timeline-card-top">
+                  <strong>{action.actor?.full_name || action.actor?.email}</strong>
+                  <span className="status-badge status-delegated">
+                    {formatEnumLabel(action.action_type)}
+                  </span>
+                </div>
+                {action.target_reviewer && (
+                  <p style={{ marginBottom: "4px" }}>
+                    → {action.target_reviewer.full_name || action.target_reviewer.email}
+                  </p>
+                )}
+                {action.comment && <p>{action.comment}</p>}
+                <span className="request-date">{formatDate(action.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -55,3 +55,24 @@ export async function applyChangeRequest(id) {
   const response = await client.post(`/change-requests/${id}/apply`);
   return response.data;
 }
+
+export async function escalateChangeRequest(id, target_reviewer_id, comment = "") {
+  const response = await client.post(`/change-requests/${id}/escalate`, {
+    target_reviewer_id,
+    comment: comment || null,
+  });
+  return response.data;
+}
+
+export async function delegateChangeRequest(id, target_reviewer_id, comment = "") {
+  const response = await client.post(`/change-requests/${id}/delegate`, {
+    target_reviewer_id,
+    comment: comment || null,
+  });
+  return response.data;
+}
+
+export async function getReviewActions(id) {
+  const response = await client.get(`/change-requests/${id}/review-actions`);
+  return response.data;
+}

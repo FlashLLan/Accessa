@@ -245,6 +245,12 @@
   border-color: rgba(239, 68, 68, 0.28);
 }
 
+.btn-warning {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
 .empty-state {
   padding: 28px;
   border: 1px dashed var(--border-strong);
@@ -944,6 +950,18 @@
   background: rgba(239, 68, 68, 0.14);
   border-color: rgba(239, 68, 68, 0.3);
   color: #fca5a5;
+}
+
+.status-escalated {
+  background: rgba(251, 146, 60, 0.14);
+  border-color: rgba(251, 146, 60, 0.3);
+  color: #fdba74;
+}
+
+.status-delegated {
+  background: rgba(99, 102, 241, 0.14);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
 }
 
 .users-table select {

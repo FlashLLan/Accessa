@@ -32,6 +32,14 @@ export function isAssignedReviewer(user, request) {
   );
 }
 
+export function isCurrentReviewer(user, request) {
+  if (request?.current_reviewer) {
+    if (!user?.email) return false;
+    return user.email.toLowerCase() === request.current_reviewer.email.toLowerCase();
+  }
+  return isAssignedReviewer(user, request);
+}
+
 export function isAdmin(user) {
   return user?.role === "admin";
 }
@@ -46,6 +54,11 @@ export function canSubmitRequest(user, request) {
 export function canReviewRequest(user, request) {
   if (request?.status !== "pending_review") return false;
   if (isRequestCreator(user, request)) return false;
+
+  // If escalated/delegated to a specific reviewer, only they can act
+  if (request?.current_reviewer) {
+    return isCurrentReviewer(user, request);
+  }
 
   const requesterRole = request?.creator?.role?.name;
   const riskLevel = request?.risk_level;
@@ -76,4 +89,16 @@ export function canViewRequestComments(user, request) {
     isRequestCreator(user, request) ||
     isAssignedReviewer(user, request)
   );
+}
+
+export function canEscalateRequest(user, request) {
+  if (request?.status !== "pending_review") return false;
+  if (isRequestCreator(user, request)) return false;
+  return isAdmin(user) || isCurrentReviewer(user, request);
+}
+
+export function canDelegateRequest(user, request) {
+  if (request?.status !== "pending_review") return false;
+  if (isRequestCreator(user, request)) return false;
+  return isAdmin(user) || isCurrentReviewer(user, request);
 }

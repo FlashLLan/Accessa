@@ -21,6 +21,16 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not verify_password(data.password, user.hashed_password):
+        log_action(
+            db=db,
+            user_id=user.id,
+            action="failed_login",
+            entity_type="user",
+            entity_id=user.id,
+            severity="warning",
+            details=f"Failed login attempt for '{user.email}'",
+        )
+        db.commit()
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     user.last_login_at = datetime.utcnow()

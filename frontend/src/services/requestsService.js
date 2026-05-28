@@ -3,10 +3,13 @@ import {
   applyChangeRequest,
   approveChangeRequest,
   createChangeRequest,
+  delegateChangeRequest,
+  escalateChangeRequest,
   getChangeRequestApprovals,
   getChangeRequestById,
   getChangeRequestComments,
   getChangeRequests,
+  getReviewActions,
   rejectChangeRequest,
   submitChangeRequest,
 } from "../api/changeRequests";
@@ -50,5 +53,17 @@ export const requestService = {
 
   async apply(id) {
     return applyChangeRequest(id);
+  },
+
+  async escalate(id, targetReviewerId, comment = "") {
+    return escalateChangeRequest(id, targetReviewerId, comment);
+  },
+
+  async delegate(id, targetReviewerId, comment = "") {
+    return delegateChangeRequest(id, targetReviewerId, comment);
+  },
+
+  async listReviewActions(id) {
+    return getReviewActions(id);
   },
 };
