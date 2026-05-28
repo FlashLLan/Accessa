@@ -4,3 +4,6 @@ from backend.models.change_request import ChangeRequest
 from backend.models.comment import Comment
 from backend.models.approval import Approval
 from backend.models.audit_log import AuditLog
+from backend.models.git_context import GitContext
+from backend.models.ai_review_result import AIReviewResult
+from backend.models.review_action import ReviewAction

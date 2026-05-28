@@ -34,8 +34,22 @@ class RequestStatus(str, enum.Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     APPLIED = "applied"
+    ESCALATED = "escalated"
+    DELEGATED = "delegated"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
 
 
 class ApprovalDecision(str, enum.Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class ReviewActionType(str, enum.Enum):
+    APPROVE = "approve"
+    REJECT = "reject"
+    DELEGATE = "delegate"
+    ESCALATE = "escalate"
+    COMMENT = "comment"
+    ASSIGN = "assign"
+    RETURN_FOR_CHANGES = "return_for_changes"

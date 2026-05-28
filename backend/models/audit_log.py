@@ -16,5 +16,11 @@ class AuditLog(Base):
     entity_id = Column(Integer, nullable=False)
     details = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    request_id = Column(Integer, nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    severity = Column(String, nullable=True)
+    old_value = Column(Text, nullable=True)
+    new_value = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="audit_logs")

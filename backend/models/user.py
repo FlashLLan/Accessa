@@ -4,8 +4,6 @@ from datetime import datetime
 
 from database.db import Base
 
-#A quick note: Comment, Approval, and AuditLog don’t exist yet, but
-#SQLAlchemy can handle string references as long as those models are imported before table creation.
 
 class User(Base):
     __tablename__ = "users"
@@ -17,6 +15,10 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deactivated_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
 
     role = relationship("Role", back_populates="users")
 
@@ -32,6 +34,22 @@ class User(Base):
         foreign_keys="ChangeRequest.assigned_reviewer_id"
     )
 
+    current_reviews = relationship(
+        "ChangeRequest",
+        back_populates="current_reviewer",
+        foreign_keys="ChangeRequest.current_reviewer_id"
+    )
+
     comments = relationship("Comment", back_populates="user")
     approvals = relationship("Approval", back_populates="reviewer")
     audit_logs = relationship("AuditLog", back_populates="user")
+    review_actions_as_actor = relationship(
+        "ReviewAction",
+        back_populates="actor",
+        foreign_keys="ReviewAction.actor_id"
+    )
+    review_actions_as_target = relationship(
+        "ReviewAction",
+        back_populates="target_reviewer",
+        foreign_keys="ReviewAction.target_reviewer_id"
+    )

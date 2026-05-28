@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -153,6 +155,7 @@ def deactivate_user(
         raise HTTPException(status_code=400, detail="User is already inactive")
 
     user.is_active = False
+    user.deactivated_at = datetime.utcnow()
     db.commit()
     db.refresh(user)
 
