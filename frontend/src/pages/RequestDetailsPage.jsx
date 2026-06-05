@@ -4,6 +4,7 @@ import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users.js";
 import { useAuth } from "../hooks/useAuth";
+import { extractApiError } from "../utils/apiError";
 import {
   canApplyRequest,
   canApproveRequest,
@@ -19,6 +20,120 @@ import {
   getStatusBadgeClass,
   getDecisionBadgeClass,
 } from "../utils/requestPresentation";
+
+function isSafeUrl(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function SafeLink({ url, label }) {
+  if (!url) return <span>—</span>;
+  if (isSafeUrl(url)) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="git-link">
+        {label || url}
+      </a>
+    );
+  }
+  return <span>{url}</span>;
+}
+
+function GitContextCard({ git }) {
+  if (!git) {
+    return (
+      <div className="details-section">
+        <h3 className="details-section-title">Git Context</h3>
+        <div className="empty-state" style={{ padding: "12px 0" }}>
+          No Git context linked to this request.
+        </div>
+      </div>
+    );
+  }
+
+  const providerLabel = {
+    github: "GitHub",
+    gitlab: "GitLab",
+    bitbucket: "Bitbucket",
+    azure_devops: "Azure DevOps",
+    other: "Other",
+  }[git.provider] || git.provider || "—";
+
+  return (
+    <div className="details-section">
+      <h3 className="details-section-title">Git Context</h3>
+
+      <div className="details-grid" style={{ marginBottom: "16px" }}>
+        {git.provider && (
+          <div className="detail-box">
+            <span className="detail-label">Provider</span>
+            <strong>{providerLabel}</strong>
+          </div>
+        )}
+        {git.repository_name && (
+          <div className="detail-box">
+            <span className="detail-label">Repository</span>
+            <strong>{git.repository_name}</strong>
+          </div>
+        )}
+        {git.branch_name && (
+          <div className="detail-box">
+            <span className="detail-label">Branch</span>
+            <strong className="git-monospace">{git.branch_name}</strong>
+          </div>
+        )}
+        {git.target_branch && (
+          <div className="detail-box">
+            <span className="detail-label">Target branch</span>
+            <strong className="git-monospace">{git.target_branch}</strong>
+          </div>
+        )}
+        {git.commit_hash && (
+          <div className="detail-box">
+            <span className="detail-label">Commit</span>
+            <strong className="git-monospace">{git.commit_hash}</strong>
+          </div>
+        )}
+        {git.repository_url && (
+          <div className="detail-box">
+            <span className="detail-label">Repository URL</span>
+            <SafeLink url={git.repository_url} />
+          </div>
+        )}
+        {git.pull_request_url && (
+          <div className="detail-box">
+            <span className="detail-label">Pull request</span>
+            <SafeLink url={git.pull_request_url} label="View PR" />
+          </div>
+        )}
+        {git.merge_request_url && (
+          <div className="detail-box">
+            <span className="detail-label">Merge request</span>
+            <SafeLink url={git.merge_request_url} label="View MR" />
+          </div>
+        )}
+      </div>
+
+      {git.changed_files_summary && (
+        <div style={{ marginBottom: "12px" }}>
+          <span className="detail-label">Changed files</span>
+          <pre className="git-pre">{git.changed_files_summary}</pre>
+        </div>
+      )}
+
+      {git.diff_text && (
+        <div>
+          <span className="detail-label">Diff / change summary</span>
+          <pre className="git-pre">{git.diff_text}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function RequestDetailsPage() {
   const { id } = useParams();
@@ -78,8 +193,7 @@ export default function RequestDetailsPage() {
     } catch (err) {
       console.error("Failed to load request", err);
       setError(
-        err?.response?.data?.detail ||
-          "Failed to load request. Please try again."
+        extractApiError(err, "Failed to load request. Please try again.")
       );
     } finally {
       setIsLoading(false);
@@ -97,8 +211,7 @@ export default function RequestDetailsPage() {
     } catch (err) {
       console.error("Failed to submit request", err);
       setToastError(
-        err?.response?.data?.detail ||
-          "Failed to submit the request for review."
+        extractApiError(err, "Failed to submit the request for review.")
       );
     } finally {
       setActionLoading(false);
@@ -118,7 +231,7 @@ export default function RequestDetailsPage() {
     } catch (err) {
       console.error("Failed to approve request", err);
       setToastError(
-        err?.response?.data?.detail || "Failed to approve the request."
+        extractApiError(err, "Failed to approve the request.")
       );
     } finally {
       setActionLoading(false);
@@ -138,7 +251,7 @@ export default function RequestDetailsPage() {
     } catch (err) {
       console.error("Failed to reject request", err);
       setToastError(
-        err?.response?.data?.detail || "Failed to reject the request."
+        extractApiError(err, "Failed to reject the request.")
       );
     } finally {
       setActionLoading(false);
@@ -156,8 +269,7 @@ export default function RequestDetailsPage() {
     } catch (err) {
       console.error("Failed to apply request", err);
       setToastError(
-        err?.response?.data?.detail ||
-          "Failed to mark the request as applied."
+        extractApiError(err, "Failed to mark the request as applied.")
       );
     } finally {
       setActionLoading(false);
@@ -176,7 +288,7 @@ export default function RequestDetailsPage() {
       await requestService.escalate(id, parseInt(selectedReviewerId), transferComment);
       navigate("/requests", { state: { message: "Request escalated." } });
     } catch (err) {
-      setToastError(err?.response?.data?.detail || "Failed to escalate the request.");
+      setToastError(extractApiError(err, "Failed to escalate the request."));
     } finally {
       setActionLoading(false);
     }
@@ -194,7 +306,7 @@ export default function RequestDetailsPage() {
       await requestService.delegate(id, parseInt(selectedReviewerId), transferComment);
       navigate("/requests", { state: { message: "Request delegated." } });
     } catch (err) {
-      setToastError(err?.response?.data?.detail || "Failed to delegate the request.");
+      setToastError(extractApiError(err, "Failed to delegate the request."));
     } finally {
       setActionLoading(false);
     }
@@ -214,7 +326,7 @@ export default function RequestDetailsPage() {
     } catch (err) {
       console.error("Failed to add comment", err);
       setToastError(
-        err?.response?.data?.detail || "Failed to add the comment."
+        extractApiError(err, "Failed to add the comment.")
       );
     } finally {
       setActionLoading(false);
@@ -296,6 +408,8 @@ const canTransfer = canEscalate || canDelegate;
         <h3 className="details-section-title">Description</h3>
         <p>{request.description}</p>
       </div>
+
+      <GitContextCard git={request.git_context} />
 
       <div className="details-section">
         <h3 className="details-section-title">Target Information</h3>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Toast from "../components/common/Toast";
 import { useAuth } from "../hooks/useAuth";
+import { extractApiError } from "../utils/apiError";
 import {
   createUser,
   deactivateUser,
@@ -94,9 +95,7 @@ function formatDateTime(value) {
     } catch (err) {
       console.error("Failed to load user management data", err);
       setError(
-        err?.response?.data?.detail ||
-          err?.message ||
-          "Failed to load users."
+        extractApiError(err, err?.message || "Failed to load users.")
       );
     } finally {
       setLoading(false);
@@ -221,7 +220,7 @@ const filteredUsers = useMemo(() => {
     } catch (err) {
       console.error("Failed to create user", err);
       setToast({
-        message: err?.response?.data?.detail || err?.message || "Failed to create user.",
+        message: extractApiError(err, err?.message || "Failed to create user."),
         type: "error",
       });
     } finally {
@@ -287,7 +286,7 @@ const handleSaveRole = async (targetUser) => {
       } catch (err) {
         console.error("Failed to update user role", err);
         setToast({
-          message: err?.response?.data?.detail || err?.message || "Failed to update role.",
+          message: extractApiError(err, err?.message || "Failed to update role."),
           type: "error",
         });
       } finally {
@@ -326,7 +325,7 @@ const handleToggleActive = async (targetUser) => {
       } catch (err) {
         console.error("Failed to update active status", err);
         setToast({
-          message: err?.response?.data?.detail || err?.message || "Failed to update user status.",
+          message: extractApiError(err, err?.message || "Failed to update user status."),
           type: "error",
         });
       } finally {
@@ -357,7 +356,7 @@ const handleToggleActive = async (targetUser) => {
   } catch (err) {
     console.error("Failed to load user details", err);
     setToast({
-      message: err?.response?.data?.detail || err?.message || "Failed to load user details.",
+      message: extractApiError(err, err?.message || "Failed to load user details."),
       type: "error",
     });
   } finally {

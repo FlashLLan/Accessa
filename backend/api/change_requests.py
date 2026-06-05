@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from backend.models.enums import RequestStatus, ApprovalDecision, RiskLevel
 from database.db import get_db
 from backend.models.change_request import ChangeRequest
+from backend.models.git_context import GitContext
 from backend.models.user import User
 from backend.models.role import Role
 from backend.models.approval import Approval
@@ -78,6 +79,31 @@ def create_change_request(
         details=f"Created request '{new_request.title}' assigned to reviewer_id={new_request.assigned_reviewer_id}"
     )
     db.commit()
+
+    if request_data.git_context is not None and request_data.git_context.has_any_data():
+        gc = request_data.git_context
+        git_ctx = GitContext(
+            change_request_id=new_request.id,
+            **gc.model_dump(),
+        )
+        db.add(git_ctx)
+        db.commit()
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action="git_context_linked",
+            entity_type="change_request",
+            entity_id=new_request.id,
+            request_id=new_request.id,
+            details=(
+                f"Git context linked: "
+                f"repo={gc.repository_url or '-'}, "
+                f"branch={gc.branch_name or '-'}, "
+                f"commit={gc.commit_hash or '-'}"
+            ),
+        )
+        db.commit()
+        db.refresh(new_request)
 
     return new_request
 

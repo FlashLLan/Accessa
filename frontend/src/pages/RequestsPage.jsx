@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
+import { extractApiError } from "../utils/apiError";
 import {
   formatDate,
   formatEnumLabel,
@@ -23,8 +24,7 @@ export default function RequestsPage() {
       } catch (err) {
         console.error("Failed to load requests", err);
         setError(
-          err?.response?.data?.detail ||
-            "Failed to load requests. Please try again."
+          extractApiError(err, "Failed to load requests. Please try again.")
         );
       } finally {
         setIsLoading(false);

@@ -22,7 +22,12 @@ def _get_request_or_404(request_id: int, db: Session) -> ChangeRequest:
 def _check_access(cr: ChangeRequest, current_user: User):
     if current_user.role.name == "admin":
         return
-    if cr.created_by != current_user.id and cr.assigned_reviewer_id != current_user.id:
+    authorized = (
+        cr.created_by == current_user.id
+        or cr.assigned_reviewer_id == current_user.id
+        or (cr.current_reviewer_id is not None and cr.current_reviewer_id == current_user.id)
+    )
+    if not authorized:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
@@ -57,6 +62,7 @@ def upsert_git_context(
         db.commit()
         db.refresh(cr.git_context)
         git_ctx = cr.git_context
+        audit_action = "git_context_updated"
     else:
         git_ctx = GitContext(
             change_request_id=request_id,
@@ -65,15 +71,21 @@ def upsert_git_context(
         db.add(git_ctx)
         db.commit()
         db.refresh(git_ctx)
+        audit_action = "git_context_linked"
 
     log_action(
         db=db,
         user_id=current_user.id,
-        action="upsert_git_context",
+        action=audit_action,
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,
-        details=f"Git context saved for request {request_id}",
+        details=(
+            f"Git context {'updated' if audit_action == 'git_context_updated' else 'linked'}: "
+            f"repo={payload.repository_url or '-'}, "
+            f"branch={payload.branch_name or '-'}, "
+            f"commit={payload.commit_hash or '-'}"
+        ),
     )
     db.commit()
 

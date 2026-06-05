@@ -3,6 +3,7 @@ import Toast from "../components/common/Toast";
 import { updateMe, changePassword, getMyStats } from "../api/users";
 import { useAuth } from "../hooks/useAuth";
 import { formatDate } from "../utils/requestPresentation";
+import { extractApiError } from "../utils/apiError";
 
 export default function AccountPage() {
   const { user, refreshMe } = useAuth();
@@ -56,7 +57,7 @@ export default function AccountPage() {
       setToast({ message: "Profile updated successfully.", type: "success" });
     } catch (err) {
       setToast({
-        message: err?.response?.data?.detail || "Failed to update profile.",
+        message: extractApiError(err, "Failed to update profile."),
         type: "error",
       });
     } finally {
@@ -96,7 +97,7 @@ export default function AccountPage() {
       setToast({ message: "Password changed successfully.", type: "success" });
     } catch (err) {
       setToast({
-        message: err?.response?.data?.detail || "Failed to change password.",
+        message: extractApiError(err, "Failed to change password."),
         type: "error",
       });
     } finally {

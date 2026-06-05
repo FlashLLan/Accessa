@@ -4,6 +4,7 @@ import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { useAuth } from "../hooks/useAuth";
 import { canReviewRequest } from "../utils/requestPermissions";
+import { extractApiError } from "../utils/apiError";
 import {
   formatDate,
   formatEnumLabel,
@@ -36,8 +37,7 @@ export default function ReviewPage() {
     } catch (err) {
       console.error("Failed to load review queue", err);
       setError(
-        err?.response?.data?.detail ||
-          "Failed to load review queue. Please try again."
+        extractApiError(err, "Failed to load review queue. Please try again.")
       );
     } finally {
       setIsLoading(false);
@@ -53,7 +53,7 @@ export default function ReviewPage() {
     } catch (err) {
       console.error("Approve failed", err);
       setToastError(
-        err?.response?.data?.detail || "Failed to approve the request."
+        extractApiError(err, "Failed to approve the request.")
       );
     } finally {
       setActionLoadingId(null);
@@ -69,7 +69,7 @@ export default function ReviewPage() {
     } catch (err) {
       console.error("Reject failed", err);
       setToastError(
-        err?.response?.data?.detail || "Failed to reject the request."
+        extractApiError(err, "Failed to reject the request.")
       );
     } finally {
       setActionLoadingId(null);

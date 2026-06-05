@@ -4,6 +4,7 @@ import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users";
 import { useAuth } from "../hooks/useAuth";
+import { extractApiError } from "../utils/apiError";
 
 const initialForm = {
   title: "",
@@ -15,11 +16,26 @@ const initialForm = {
   assigned_reviewer_id: "",
 };
 
+const initialGitForm = {
+  provider: "",
+  repository_url: "",
+  repository_name: "",
+  branch_name: "",
+  target_branch: "",
+  commit_hash: "",
+  pull_request_url: "",
+  merge_request_url: "",
+  changed_files_summary: "",
+  diff_text: "",
+};
+
 export default function CreateRequestPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
   const [form, setForm] = useState(initialForm);
+  const [gitOpen, setGitOpen] = useState(false);
+  const [gitForm, setGitForm] = useState(initialGitForm);
   const [reviewers, setReviewers] = useState([]);
   const [isLoadingReviewers, setIsLoadingReviewers] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,8 +53,7 @@ export default function CreateRequestPage() {
       } catch (err) {
         console.error("Failed to load reviewers", err);
         setError(
-          err?.response?.data?.detail ||
-            "Failed to load reviewers. Please try again."
+          extractApiError(err, "Failed to load reviewers. Please try again.")
         );
       } finally {
         setIsLoadingReviewers(false);
@@ -50,13 +65,16 @@ export default function CreateRequestPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     setForm((prev) => ({
       ...prev,
       [name]: value,
-      // Clear the reviewer selection when risk level changes — the eligible list will update
       ...(name === "risk_level" ? { assigned_reviewer_id: "" } : {}),
     }));
+  };
+
+  const handleGitChange = (e) => {
+    const { name, value } = e.target;
+    setGitForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -72,20 +90,26 @@ export default function CreateRequestPage() {
         assigned_reviewer_id: Number(form.assigned_reviewer_id),
       };
 
+      // Include git_context only if at least one field is non-empty
+      const gitEntries = Object.entries(gitForm).filter(([, v]) => v.trim() !== "");
+      if (gitEntries.length > 0) {
+        const gitPayload = {};
+        gitEntries.forEach(([k, v]) => { gitPayload[k] = v; });
+        payload.git_context = gitPayload;
+      }
+
       const created = await requestService.create(payload);
 
       setSuccessMessage("Request created successfully.");
       setForm(initialForm);
+      setGitForm(initialGitForm);
 
       setTimeout(() => {
         navigate(`/requests/${created.id}`);
       }, 600);
     } catch (err) {
       console.error("Failed to create request", err);
-      setToastError(
-        err?.response?.data?.detail ||
-          "Failed to create the request. Please check your input."
-      );
+      setToastError(extractApiError(err, "Failed to create the request. Please check your input."));
     } finally {
       setIsSubmitting(false);
     }
@@ -210,6 +234,160 @@ export default function CreateRequestPage() {
           </div>
         </div>
 
+        {/* Git-linked context — collapsible, optional */}
+        <div className="git-context-section">
+          <button
+            type="button"
+            className="git-context-toggle"
+            onClick={() => setGitOpen((prev) => !prev)}
+            aria-expanded={gitOpen}
+          >
+            <span>Git-linked context</span>
+            <span className="git-context-badge">optional</span>
+            <span className="git-context-chevron">{gitOpen ? "▲" : "▼"}</span>
+          </button>
+
+          {gitOpen && (
+            <div className="git-context-fields">
+              <p className="git-context-hint">
+                Optional Git metadata can help reviewers understand the technical
+                context. Do not paste secrets, tokens, passwords, or private keys.
+              </p>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="gc_provider">Provider</label>
+                  <select
+                    id="gc_provider"
+                    name="provider"
+                    value={gitForm.provider}
+                    onChange={handleGitChange}
+                  >
+                    <option value="">Select provider</option>
+                    <option value="github">GitHub</option>
+                    <option value="gitlab">GitLab</option>
+                    <option value="bitbucket">Bitbucket</option>
+                    <option value="azure_devops">Azure DevOps</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="gc_repository_name">Repository name</label>
+                  <input
+                    id="gc_repository_name"
+                    name="repository_name"
+                    type="text"
+                    value={gitForm.repository_name}
+                    onChange={handleGitChange}
+                    placeholder="my-service"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="gc_repository_url">Repository URL</label>
+                <input
+                  id="gc_repository_url"
+                  name="repository_url"
+                  type="url"
+                  value={gitForm.repository_url}
+                  onChange={handleGitChange}
+                  placeholder="https://github.com/org/my-service"
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="gc_branch_name">Branch name</label>
+                  <input
+                    id="gc_branch_name"
+                    name="branch_name"
+                    type="text"
+                    value={gitForm.branch_name}
+                    onChange={handleGitChange}
+                    placeholder="feature/my-change"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="gc_target_branch">Target branch</label>
+                  <input
+                    id="gc_target_branch"
+                    name="target_branch"
+                    type="text"
+                    value={gitForm.target_branch}
+                    onChange={handleGitChange}
+                    placeholder="main"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="gc_commit_hash">Commit hash</label>
+                <input
+                  id="gc_commit_hash"
+                  name="commit_hash"
+                  type="text"
+                  value={gitForm.commit_hash}
+                  onChange={handleGitChange}
+                  placeholder="abc1234"
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="gc_pull_request_url">Pull request URL</label>
+                  <input
+                    id="gc_pull_request_url"
+                    name="pull_request_url"
+                    type="url"
+                    value={gitForm.pull_request_url}
+                    onChange={handleGitChange}
+                    placeholder="https://github.com/org/repo/pull/42"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="gc_merge_request_url">Merge request URL</label>
+                  <input
+                    id="gc_merge_request_url"
+                    name="merge_request_url"
+                    type="url"
+                    value={gitForm.merge_request_url}
+                    onChange={handleGitChange}
+                    placeholder="https://gitlab.com/org/repo/-/merge_requests/7"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="gc_changed_files_summary">Changed files summary</label>
+                <textarea
+                  id="gc_changed_files_summary"
+                  name="changed_files_summary"
+                  rows="3"
+                  value={gitForm.changed_files_summary}
+                  onChange={handleGitChange}
+                  placeholder="backend/auth.py, frontend/LoginPage.jsx"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="gc_diff_text">Diff / change summary</label>
+                <textarea
+                  id="gc_diff_text"
+                  name="diff_text"
+                  rows="5"
+                  value={gitForm.diff_text}
+                  onChange={handleGitChange}
+                  placeholder="Briefly describe what changed and why"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="page-actions">
           <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Creating..." : "Create Request"}
@@ -219,6 +397,7 @@ export default function CreateRequestPage() {
             type="button"
             onClick={() => {
               setForm(initialForm);
+              setGitForm(initialGitForm);
               setError("");
               setSuccessMessage("");
             }}

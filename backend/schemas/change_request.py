@@ -3,6 +3,8 @@ from pydantic import BaseModel, ConfigDict
 
 from backend.models.enums import RequestType, EnvironmentType, RiskLevel, RequestStatus, ApprovalDecision
 from backend.schemas.user import UserResponse, UserShortResponse
+from backend.schemas.git_context import GitContextCreate, GitContextResponse
+
 
 class ChangeRequestCreate(BaseModel):
     title: str
@@ -12,6 +14,7 @@ class ChangeRequestCreate(BaseModel):
     environment: EnvironmentType
     risk_level: RiskLevel
     assigned_reviewer_id: int
+    git_context: GitContextCreate | None = None
 
 
 class ChangeRequestResponse(BaseModel):
@@ -28,6 +31,7 @@ class ChangeRequestResponse(BaseModel):
     current_reviewer: UserShortResponse | None = None
     created_at: datetime
     updated_at: datetime
+    git_context: GitContextResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1034,6 +1034,97 @@
   color: #f8fafc;
 }
 
+/* ── Git context section ──────────────────────────────────────── */
+
+.git-context-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.git-context-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(139, 92, 246, 0.06);
+  border: none;
+  cursor: pointer;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.git-context-toggle:hover {
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.git-context-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-soft);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
+.git-context-chevron {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.git-context-fields {
+  padding: 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.git-context-hint {
+  font-size: 13px;
+  color: var(--text-soft);
+  margin-bottom: 16px;
+  line-height: 1.55;
+}
+
+.git-link {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.git-link:hover {
+  text-decoration: underline;
+}
+
+.git-monospace {
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 13px;
+}
+
+.git-pre {
+  margin: 6px 0 0;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-main);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 .toolbar-actions select option:hover,
 .users-table select option:hover,
 .toolbar-actions select option:checked,
