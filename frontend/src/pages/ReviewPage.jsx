@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { useAuth } from "../hooks/useAuth";
 import { canReviewRequest } from "../utils/requestPermissions";
@@ -15,6 +16,7 @@ export default function ReviewPage() {
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [toastError, setToastError] = useState("");
   const [decisionComment, setDecisionComment] = useState({});
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
@@ -50,7 +52,7 @@ export default function ReviewPage() {
       await loadRequests();
     } catch (err) {
       console.error("Approve failed", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail || "Failed to approve the request."
       );
     } finally {
@@ -66,7 +68,7 @@ export default function ReviewPage() {
       await loadRequests();
     } catch (err) {
       console.error("Reject failed", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail || "Failed to reject the request."
       );
     } finally {
@@ -168,6 +170,7 @@ export default function ReviewPage() {
           ))}
         </div>
       )}
+      <Toast message={toastError} type="error" onClose={() => setToastError("")} />
     </div>
   );
 }

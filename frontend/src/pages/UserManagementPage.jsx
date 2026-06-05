@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import Toast from "../components/common/Toast";
 import { useAuth } from "../hooks/useAuth";
 import {
   createUser,
@@ -48,7 +49,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [toast, setToast] = useState({ message: "", type: "error" });
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
@@ -183,8 +184,6 @@ const filteredUsers = useMemo(() => {
     setEditForm({
       role_id: String(user.role?.id ?? ""),
     });
-    setError("");
-    setSuccess("");
   };
 
   const handleCancelEdit = () => {
@@ -195,8 +194,6 @@ const filteredUsers = useMemo(() => {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    setError("");
-    setSuccess("");
 
     try {
       await createUser({
@@ -206,7 +203,7 @@ const filteredUsers = useMemo(() => {
         role_id: Number(createForm.role_id),
       });
 
-      setSuccess("User created successfully.");
+      setToast({ message: "User created successfully.", type: "success" });
       setCreateForm({
         full_name: "",
         email: "",
@@ -217,11 +214,10 @@ const filteredUsers = useMemo(() => {
       await loadData();
     } catch (err) {
       console.error("Failed to create user", err);
-      setError(
-        err?.response?.data?.detail ||
-          err?.message ||
-          "Failed to create user."
-      );
+      setToast({
+        message: err?.response?.data?.detail || err?.message || "Failed to create user.",
+        type: "error",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -276,21 +272,18 @@ const handleSaveRole = async (targetUser) => {
     confirmVariant: "primary",
     onConfirm: async () => {
       setSubmitting(true);
-      setError("");
-      setSuccess("");
 
       try {
         await updateUserRole(targetUser.id, Number(editForm.role_id));
-        setSuccess(`Updated role for ${targetUser.full_name}.`);
+        setToast({ message: `Updated role for ${targetUser.full_name}.`, type: "success" });
         setEditingUserId(null);
         await loadData();
       } catch (err) {
         console.error("Failed to update user role", err);
-        setError(
-          err?.response?.data?.detail ||
-            err?.message ||
-            "Failed to update role."
-        );
+        setToast({
+          message: err?.response?.data?.detail || err?.message || "Failed to update role.",
+          type: "error",
+        });
       } finally {
         setSubmitting(false);
       }
@@ -309,16 +302,14 @@ const handleToggleActive = async (targetUser) => {
     confirmVariant: isDisabling ? "danger" : "primary",
     onConfirm: async () => {
       setSubmitting(true);
-      setError("");
-      setSuccess("");
 
       try {
         if (targetUser.is_active) {
           await deactivateUser(targetUser.id);
-          setSuccess(`Disabled ${targetUser.full_name}.`);
+          setToast({ message: `Disabled ${targetUser.full_name}.`, type: "success" });
         } else {
           await reactivateUser(targetUser.id);
-          setSuccess(`Reactivated ${targetUser.full_name}.`);
+          setToast({ message: `Reactivated ${targetUser.full_name}.`, type: "success" });
         }
 
         if (editingUserId === targetUser.id) {
@@ -328,11 +319,10 @@ const handleToggleActive = async (targetUser) => {
         await loadData();
       } catch (err) {
         console.error("Failed to update active status", err);
-        setError(
-          err?.response?.data?.detail ||
-            err?.message ||
-            "Failed to update user status."
-        );
+        setToast({
+          message: err?.response?.data?.detail || err?.message || "Failed to update user status.",
+          type: "error",
+        });
       } finally {
         setSubmitting(false);
       }
@@ -354,19 +344,16 @@ const handleToggleActive = async (targetUser) => {
 
   const handleShowDetails = async (targetUser) => {
   setDetailsLoading(true);
-  setError("");
-  setSuccess("");
 
   try {
     const data = await getUserDetails(targetUser.id);
     setDetailsUser(data);
   } catch (err) {
     console.error("Failed to load user details", err);
-    setError(
-      err?.response?.data?.detail ||
-        err?.message ||
-        "Failed to load user details."
-    );
+    setToast({
+      message: err?.response?.data?.detail || err?.message || "Failed to load user details.",
+      type: "error",
+    });
   } finally {
     setDetailsLoading(false);
   }
@@ -388,7 +375,6 @@ const handleToggleActive = async (targetUser) => {
               onClick={() => {
                 setShowCreateForm((prev) => !prev);
                 setError("");
-                setSuccess("");
               }}
           >
             {showCreateForm ? "Close" : "Add User"}
@@ -396,7 +382,7 @@ const handleToggleActive = async (targetUser) => {
         </div>
 
         {error && <div className="auth-error">{error}</div>}
-        {success && <div className="success-banner">{success}</div>}
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: "", type: "error" })} />
 
         {showCreateForm && (
             <div className="details-section">

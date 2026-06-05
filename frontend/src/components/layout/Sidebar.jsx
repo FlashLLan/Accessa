@@ -16,6 +16,7 @@ export default function Sidebar() {
       to: "/requests",
       label: "Requests",
       roles: ["admin", "lead", "senior", "junior", "mid"],
+      end: true,
     },
     {
       to: "/requests/new",
@@ -51,6 +52,7 @@ export default function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.end}
             className={({ isActive }) =>
               `sidebar-link ${isActive ? "active" : ""}`
             }

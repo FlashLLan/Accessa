@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users";
 import { useAuth } from "../hooks/useAuth";
@@ -23,6 +24,7 @@ export default function CreateRequestPage() {
   const [isLoadingReviewers, setIsLoadingReviewers] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [toastError, setToastError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export default function CreateRequestPage() {
       }, 600);
     } catch (err) {
       console.error("Failed to create request", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail ||
           "Failed to create the request. Please check your input."
       );
@@ -98,6 +100,7 @@ export default function CreateRequestPage() {
 
       {error && <div className="auth-error">{error}</div>}
       {successMessage && <div className="success-banner">{successMessage}</div>}
+      <Toast message={toastError} type="error" onClose={() => setToastError("")} />
 
       <form className="request-form" onSubmit={handleSubmit}>
         <div className="form-group">

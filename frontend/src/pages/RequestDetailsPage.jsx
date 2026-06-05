@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users.js";
 import { useAuth } from "../hooks/useAuth";
@@ -35,6 +36,7 @@ export default function RequestDetailsPage() {
   const [selectedReviewerId, setSelectedReviewerId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [toastError, setToastError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const canViewComments = canViewRequestComments(user, request);
@@ -94,7 +96,7 @@ export default function RequestDetailsPage() {
       setActionMessage("Request submitted for review.");
     } catch (err) {
       console.error("Failed to submit request", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail ||
           "Failed to submit the request for review."
       );
@@ -115,7 +117,7 @@ export default function RequestDetailsPage() {
       await loadAll();
     } catch (err) {
       console.error("Failed to approve request", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail || "Failed to approve the request."
       );
     } finally {
@@ -135,7 +137,7 @@ export default function RequestDetailsPage() {
       await loadAll();
     } catch (err) {
       console.error("Failed to reject request", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail || "Failed to reject the request."
       );
     } finally {
@@ -153,7 +155,7 @@ export default function RequestDetailsPage() {
       setActionMessage("Request marked as applied.");
     } catch (err) {
       console.error("Failed to apply request", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail ||
           "Failed to mark the request as applied."
       );
@@ -164,17 +166,17 @@ export default function RequestDetailsPage() {
 
   async function handleEscalate() {
     if (!selectedReviewerId) {
-      setError("Please select a target reviewer before escalating.");
+      setToastError("Please select a target reviewer before escalating.");
       return;
     }
     try {
       setActionLoading(true);
-      setError("");
+      setToastError("");
       setActionMessage("");
       await requestService.escalate(id, parseInt(selectedReviewerId), transferComment);
       navigate("/requests", { state: { message: "Request escalated." } });
     } catch (err) {
-      setError(err?.response?.data?.detail || "Failed to escalate the request.");
+      setToastError(err?.response?.data?.detail || "Failed to escalate the request.");
     } finally {
       setActionLoading(false);
     }
@@ -182,17 +184,17 @@ export default function RequestDetailsPage() {
 
   async function handleDelegate() {
     if (!selectedReviewerId) {
-      setError("Please select a target reviewer before delegating.");
+      setToastError("Please select a target reviewer before delegating.");
       return;
     }
     try {
       setActionLoading(true);
-      setError("");
+      setToastError("");
       setActionMessage("");
       await requestService.delegate(id, parseInt(selectedReviewerId), transferComment);
       navigate("/requests", { state: { message: "Request delegated." } });
     } catch (err) {
-      setError(err?.response?.data?.detail || "Failed to delegate the request.");
+      setToastError(err?.response?.data?.detail || "Failed to delegate the request.");
     } finally {
       setActionLoading(false);
     }
@@ -211,7 +213,7 @@ export default function RequestDetailsPage() {
       await loadAll();
     } catch (err) {
       console.error("Failed to add comment", err);
-      setError(
+      setToastError(
         err?.response?.data?.detail || "Failed to add the comment."
       );
     } finally {
@@ -535,6 +537,8 @@ const canTransfer = canEscalate || canDelegate;
           </div>
         </div>
       )}
+
+      <Toast message={toastError} type="error" onClose={() => setToastError("")} />
     </div>
   );
 }
