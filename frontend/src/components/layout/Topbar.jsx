@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 
 export default function Topbar() {
@@ -18,10 +18,12 @@ export default function Topbar() {
       </div>
 
       <div className="topbar-actions">
-        <div className="topbar-user">
-          <span className="topbar-user-name">{user?.name || "Test User"}</span>
-          <span className="topbar-user-role">{user?.role || "unknown"}</span>
-        </div>
+        <Link to="/account" className="topbar-user-link">
+          <div className="topbar-user">
+            <span className="topbar-user-name">{user?.name || "Test User"}</span>
+            <span className="topbar-user-role">{user?.role || "unknown"}</span>
+          </div>
+        </Link>
 
         <button className="btn btn-secondary" onClick={handleLogout}>
           Logout

@@ -10,6 +10,7 @@ import RequestDetailsPage from "./pages/RequestDetailsPage";
 import CreateRequestPage from "./pages/CreateRequestPage";
 import ReviewPage from "./pages/ReviewPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import AccountPage from "./pages/AccountPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/account" element={<AccountPage />} />
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/new" element={<CreateRequestPage />} />
           <Route path="/requests/:id" element={<RequestDetailsPage />} />

@@ -1189,3 +1189,23 @@
   from { transform: translateY(14px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
+.topbar-user-link {
+  text-decoration: none;
+  color: inherit;
+  border-radius: 14px;
+  transition: opacity 0.18s;
+}
+.topbar-user-link:hover .topbar-user {
+  border-color: rgba(139, 92, 246, 0.38);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.account-stats-group {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+}

@@ -7,18 +7,24 @@ from database.db import get_db
 from backend.models.user import User
 from backend.models.role import Role
 from backend.core.dependencies import get_current_user, can_create_role
-from backend.core.security import hash_password
+from backend.core.security import hash_password, verify_password
 from backend.services.audit_service import log_action
 from sqlalchemy import func
 from backend.models.change_request import ChangeRequest
 from backend.models.approval import Approval
-from backend.models.enums import RequestStatus, ApprovalDecision
+from backend.models.enums import RequestStatus, ApprovalDecision, ReviewActionType
+from backend.models.comment import Comment
+from backend.models.review_action import ReviewAction
+from backend.models.audit_log import AuditLog
 from backend.schemas.user import (
     UserCreate,
     UserResponse,
     UserShortResponse,
     UserRoleUpdate,
     UserDetailsResponse,
+    UserUpdateMe,
+    PasswordChangeRequest,
+    UserMeStatsResponse,
 )
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -69,6 +75,188 @@ def list_reviewers(
     )
 
     return reviewers
+
+
+@router.put("/me", response_model=UserResponse)
+def update_me(
+    payload: UserUpdateMe,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    full_name = payload.full_name.strip()
+    if not full_name:
+        raise HTTPException(status_code=400, detail="Full name cannot be empty.")
+
+    old_name = current_user.full_name
+    current_user.full_name = full_name
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(current_user)
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="profile_updated",
+        entity_type="user",
+        entity_id=current_user.id,
+        details="Updated full_name",
+        old_value=old_name,
+        new_value=current_user.full_name,
+    )
+    db.commit()
+
+    return current_user
+
+
+@router.put("/me/password", status_code=200)
+def change_my_password(
+    payload: PasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="New password and confirmation do not match.")
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters.")
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="password_changed",
+        entity_type="user",
+        entity_id=current_user.id,
+        details="User changed their own password",
+    )
+    db.commit()
+
+    return {"message": "Password changed successfully."}
+
+
+@router.get("/me/stats", response_model=UserMeStatsResponse)
+def get_my_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    uid = current_user.id
+
+    requests_created = (
+        db.query(func.count(ChangeRequest.id))
+        .filter(ChangeRequest.created_by == uid)
+        .scalar() or 0
+    )
+
+    pending_requests = (
+        db.query(func.count(ChangeRequest.id))
+        .filter(
+            ChangeRequest.created_by == uid,
+            ChangeRequest.status.in_([
+                RequestStatus.PENDING_REVIEW,
+                RequestStatus.ESCALATED,
+                RequestStatus.DELEGATED,
+            ]),
+        )
+        .scalar() or 0
+    )
+
+    approved_requests = (
+        db.query(func.count(ChangeRequest.id))
+        .filter(ChangeRequest.created_by == uid, ChangeRequest.status == RequestStatus.APPROVED)
+        .scalar() or 0
+    )
+
+    rejected_requests = (
+        db.query(func.count(ChangeRequest.id))
+        .filter(ChangeRequest.created_by == uid, ChangeRequest.status == RequestStatus.REJECTED)
+        .scalar() or 0
+    )
+
+    comments_written = (
+        db.query(func.count(Comment.id))
+        .filter(Comment.user_id == uid)
+        .scalar() or 0
+    )
+
+    requests_reviewed = (
+        db.query(func.count(Approval.id))
+        .filter(Approval.reviewer_id == uid)
+        .scalar() or 0
+    )
+
+    approved_decisions = (
+        db.query(func.count(Approval.id))
+        .filter(Approval.reviewer_id == uid, Approval.decision == ApprovalDecision.APPROVED)
+        .scalar() or 0
+    )
+
+    rejected_decisions = (
+        db.query(func.count(Approval.id))
+        .filter(Approval.reviewer_id == uid, Approval.decision == ApprovalDecision.REJECTED)
+        .scalar() or 0
+    )
+
+    delegations_performed = (
+        db.query(func.count(ReviewAction.id))
+        .filter(ReviewAction.actor_id == uid, ReviewAction.action_type == ReviewActionType.DELEGATE)
+        .scalar() or 0
+    )
+
+    escalations_performed = (
+        db.query(func.count(ReviewAction.id))
+        .filter(ReviewAction.actor_id == uid, ReviewAction.action_type == ReviewActionType.ESCALATE)
+        .scalar() or 0
+    )
+
+    users_created = None
+    users_deactivated = None
+    role_changes_performed = None
+    admin_actions_logged = None
+
+    if current_user.role.name == "admin":
+        users_created = (
+            db.query(func.count(User.id))
+            .filter(User.created_by == uid)
+            .scalar() or 0
+        )
+        users_deactivated = (
+            db.query(func.count(AuditLog.id))
+            .filter(AuditLog.user_id == uid, AuditLog.action == "deactivate_user")
+            .scalar() or 0
+        )
+        role_changes_performed = (
+            db.query(func.count(AuditLog.id))
+            .filter(AuditLog.user_id == uid, AuditLog.action == "update_user_role")
+            .scalar() or 0
+        )
+        admin_actions_logged = (
+            db.query(func.count(AuditLog.id))
+            .filter(AuditLog.user_id == uid)
+            .scalar() or 0
+        )
+
+    return UserMeStatsResponse(
+        requests_created=requests_created,
+        pending_requests=pending_requests,
+        approved_requests=approved_requests,
+        rejected_requests=rejected_requests,
+        comments_written=comments_written,
+        requests_reviewed=requests_reviewed,
+        approved_decisions=approved_decisions,
+        rejected_decisions=rejected_decisions,
+        delegations_performed=delegations_performed,
+        escalations_performed=escalations_performed,
+        users_created=users_created,
+        users_deactivated=users_deactivated,
+        role_changes_performed=role_changes_performed,
+        admin_actions_logged=admin_actions_logged,
+    )
 
 
 @router.get("/{user_id}", response_model=UserResponse)

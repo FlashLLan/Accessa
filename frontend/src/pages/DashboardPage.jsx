@@ -51,6 +51,28 @@ export default function DashboardPage() {
             Manage Users
           </Link>
         )}
+        <Link to="/account" className="quick-link">
+          My Account
+        </Link>
+      </div>
+
+      <div className="details-section" style={{ marginTop: "24px" }}>
+        <h3 className="details-section-title">Account Summary</h3>
+        <div className="details-grid" style={{ marginBottom: "16px" }}>
+          <div className="detail-box">
+            <span className="detail-label">Name</span>
+            <strong>{user?.name || "Unknown"}</strong>
+          </div>
+          <div className="detail-box">
+            <span className="detail-label">Role</span>
+            <strong style={{ textTransform: "capitalize" }}>{user?.role || "Unknown"}</strong>
+          </div>
+        </div>
+        <div className="page-actions">
+          <Link to="/account" className="btn btn-secondary">
+            Manage account
+          </Link>
+        </div>
       </div>
     </div>
   );

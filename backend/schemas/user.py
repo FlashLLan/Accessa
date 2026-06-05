@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from backend.schemas.role import RoleResponse
@@ -50,3 +51,33 @@ class UserDetailsResponse(BaseModel):
     stats: UserStatsResponse
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserUpdateMe(BaseModel):
+    full_name: str
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+
+class UserMeStatsResponse(BaseModel):
+    # All users — requests
+    requests_created: int
+    pending_requests: int
+    approved_requests: int
+    rejected_requests: int
+    comments_written: int
+    # All users — reviews
+    requests_reviewed: int
+    approved_decisions: int
+    rejected_decisions: int
+    delegations_performed: int
+    escalations_performed: int
+    # Admins only (None for non-admins)
+    users_created: Optional[int]
+    users_deactivated: Optional[int]
+    role_changes_performed: Optional[int]
+    admin_actions_logged: Optional[int]

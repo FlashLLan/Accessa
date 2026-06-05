@@ -49,3 +49,18 @@ export async function getUserDetails(userId) {
   const response = await client.get(`/users/${userId}/details`);
   return response.data;
 }
+
+export async function updateMe(payload) {
+  const response = await client.put("/users/me", payload);
+  return response.data;
+}
+
+export async function changePassword(payload) {
+  const response = await client.put("/users/me/password", payload);
+  return response.data;
+}
+
+export async function getMyStats() {
+  const response = await client.get("/users/me/stats");
+  return response.data;
+}
