@@ -87,6 +87,13 @@ def update_me(
     if not full_name:
         raise HTTPException(status_code=400, detail="Full name cannot be empty.")
 
+    existing = db.query(User).filter(
+        func.lower(User.full_name) == full_name.lower(),
+        User.id != current_user.id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="This name is already taken by another user.")
+
     old_name = current_user.full_name
     current_user.full_name = full_name
     current_user.updated_at = datetime.utcnow()
@@ -117,11 +124,14 @@ def change_my_password(
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect.")
 
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters.")
+
     if payload.new_password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="New password and confirmation do not match.")
 
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters.")
+    if verify_password(payload.new_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="New password must be different from the current password.")
 
     current_user.hashed_password = hash_password(payload.new_password)
     current_user.updated_at = datetime.utcnow()
@@ -282,9 +292,18 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if len(user_data.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    existing_name = db.query(User).filter(
+        func.lower(User.full_name) == user_data.full_name.strip().lower()
+    ).first()
+    if existing_name:
+        raise HTTPException(status_code=400, detail="A user with this name already exists.")
 
     role = db.query(Role).filter(Role.id == user_data.role_id).first()
     if not role:

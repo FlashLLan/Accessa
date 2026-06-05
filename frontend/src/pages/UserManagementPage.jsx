@@ -193,6 +193,12 @@ const filteredUsers = useMemo(() => {
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
+
+    if (createForm.password.length < 8) {
+      setToast({ message: "Password must be at least 8 characters.", type: "error" });
+      return;
+    }
+
     setSubmitting(true);
 
     try {

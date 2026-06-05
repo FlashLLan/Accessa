@@ -84,6 +84,10 @@ export default function AccountPage() {
       setToast({ message: "New password and confirmation do not match.", type: "error" });
       return;
     }
+    if (new_password === current_password) {
+      setToast({ message: "New password must be different from your current password.", type: "error" });
+      return;
+    }
 
     try {
       setIsChangingPassword(true);
