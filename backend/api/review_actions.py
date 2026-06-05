@@ -9,6 +9,7 @@ from backend.models.user import User
 from backend.models.enums import RequestStatus, ReviewActionType
 from backend.core.dependencies import get_current_user
 from backend.schemas.review_action import ReviewActionResponse
+from backend.services.approval_service import get_allowed_approver_roles
 from backend.services.audit_service import log_action
 
 router = APIRouter(prefix="/change-requests", tags=["Review Actions"])
@@ -48,6 +49,15 @@ def _get_target_reviewer(target_id: int, current_user: User, db: Session) -> Use
     return target
 
 
+def _assert_matrix_eligible(target: User, cr: ChangeRequest):
+    eligible_roles = get_allowed_approver_roles(cr.creator.role.name, cr.risk_level.value)
+    if target.role.name not in eligible_roles:
+        raise HTTPException(
+            status_code=400,
+            detail="Target reviewer is not eligible to review this request per the approval matrix.",
+        )
+
+
 @router.get("/{request_id}/review-actions", response_model=list[ReviewActionResponse])
 def list_review_actions(
     request_id: int,
@@ -85,25 +95,29 @@ def escalate_request(
 
     if target.id == cr.created_by:
         raise HTTPException(status_code=400, detail="Cannot escalate to the request creator")
-    if target.id == cr.assigned_reviewer_id:
-        raise HTTPException(status_code=400, detail="Cannot escalate back to the original assigned reviewer")
 
     already_handled = db.query(ReviewAction).filter(
         ReviewAction.change_request_id == request_id,
         ReviewAction.actor_id == target.id,
     ).first()
     if already_handled:
-        raise HTTPException(status_code=400, detail="Cannot escalate to a reviewer who has already handled this request")
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot escalate to a reviewer who has already handled this request",
+        )
 
     current_level = ROLE_HIERARCHY.get(current_user.role.name, -1)
     target_level = ROLE_HIERARCHY.get(target.role.name, -1)
     if target_level <= current_level:
         raise HTTPException(
             status_code=400,
-            detail="Escalation must go to a higher role. Use delegation for the same role."
+            detail="Escalation must go to a higher role. Use delegation for the same role.",
         )
 
+    _assert_matrix_eligible(target, cr)
+
     from_status = cr.status.value
+    cr.assigned_reviewer_id = target.id
     cr.current_reviewer_id = target.id
 
     action = ReviewAction(
@@ -154,12 +168,30 @@ def delegate_request(
     if target.id == cr.created_by:
         raise HTTPException(status_code=400, detail="Cannot delegate to the request creator")
 
+    current_level = ROLE_HIERARCHY.get(current_user.role.name, -1)
+    target_level = ROLE_HIERARCHY.get(target.role.name, -1)
+    if target_level < current_level:
+        raise HTTPException(
+            status_code=400,
+            detail="Delegation to a lower role is not allowed.",
+        )
+    if target_level > current_level:
+        raise HTTPException(
+            status_code=400,
+            detail="Delegation to a higher role is not allowed. Use escalation instead.",
+        )
+
+    _assert_matrix_eligible(target, cr)
+
     already_handled = db.query(ReviewAction).filter(
         ReviewAction.change_request_id == request_id,
         ReviewAction.actor_id == target.id,
     ).first()
     if already_handled:
-        raise HTTPException(status_code=400, detail="Cannot delegate to a reviewer who has already handled this request")
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delegate to a reviewer who has already handled this request",
+        )
 
     from_status = cr.status.value
     cr.assigned_reviewer_id = target.id
