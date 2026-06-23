@@ -136,7 +136,7 @@ def escalate_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="escalate_change_request",
+        action="REQUEST_ESCALATED",
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,
@@ -214,7 +214,7 @@ def delegate_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="delegate_change_request",
+        action="REQUEST_DELEGATED",
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,

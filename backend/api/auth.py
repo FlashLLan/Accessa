@@ -24,7 +24,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         log_action(
             db=db,
             user_id=user.id,
-            action="failed_login",
+            action="LOGIN_FAILED",
             entity_type="user",
             entity_id=user.id,
             severity="warning",
@@ -40,7 +40,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     log_action(
         db=db,
         user_id=user.id,
-        action="login",
+        action="LOGIN_SUCCESS",
         entity_type="user",
         entity_id=user.id,
         details=f"User '{user.email}' logged in",
@@ -75,7 +75,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     log_action(
         db=db,
         user_id=new_user.id,
-        action="register",
+        action="USER_CREATED",
         entity_type="user",
         entity_id=new_user.id,
         details=f"User '{new_user.email}' self-registered",

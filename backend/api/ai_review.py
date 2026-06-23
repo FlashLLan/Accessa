@@ -73,7 +73,7 @@ def trigger_ai_review(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="trigger_ai_review",
+        action="AI_REVIEW_GENERATED",
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,

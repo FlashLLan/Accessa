@@ -4,26 +4,48 @@ import { extractApiError } from "../utils/apiError";
 import { getAuditLogs } from "../api/auditLogs";
 
 const ACTION_LABELS = {
+  LOGIN_SUCCESS: "Login",
+  LOGIN_FAILED: "Failed Login",
+  USER_CREATED: "User Created",
+  USER_DEACTIVATED: "User Deactivated",
+  USER_REACTIVATED: "User Reactivated",
+  ROLE_ASSIGNED: "Role Assigned",
+  ROLE_CHANGED: "Role Changed",
+  PROFILE_UPDATED: "Profile Updated",
+  PASSWORD_CHANGED: "Password Changed",
+  REQUEST_CREATED: "Request Created",
+  REQUEST_SUBMITTED: "Request Submitted",
+  REQUEST_UPDATED: "Request Updated",
+  REQUEST_APPROVED: "Request Approved",
+  REQUEST_REJECTED: "Request Rejected",
+  REQUEST_ESCALATED: "Request Escalated",
+  REQUEST_DELEGATED: "Request Delegated",
+  REQUEST_APPLIED: "Request Applied",
+  COMMENT_CREATED: "Comment Created",
+  GIT_CONTEXT_LINKED: "Git Context Linked",
+  AI_REVIEW_GENERATED: "AI Review Generated",
+  AUDIT_VIEWED: "Audit Log Viewed",
+  // legacy names still present in existing DB rows
   login: "Login",
   failed_login: "Failed Login",
-  register: "Register",
-  create_user: "Create User",
-  deactivate_user: "Deactivate User",
-  reactivate_user: "Reactivate User",
-  update_user_role: "Update Role",
+  register: "User Created",
+  create_user: "User Created",
+  deactivate_user: "User Deactivated",
+  reactivate_user: "User Reactivated",
+  update_user_role: "Role Changed",
   profile_updated: "Profile Updated",
   password_changed: "Password Changed",
-  create_change_request: "Create Request",
-  submit_change_request: "Submit Request",
-  update_change_request: "Update Request",
-  approve_change_request: "Approve Request",
-  reject_change_request: "Reject Request",
-  escalate_change_request: "Escalate Request",
-  delegate_change_request: "Delegate Request",
-  apply_change_request: "Apply Request",
-  add_comment: "Add Comment",
+  create_change_request: "Request Created",
+  submit_change_request: "Request Submitted",
+  update_change_request: "Request Updated",
+  approve_change_request: "Request Approved",
+  reject_change_request: "Request Rejected",
+  escalate_change_request: "Request Escalated",
+  delegate_change_request: "Request Delegated",
+  apply_change_request: "Request Applied",
+  add_comment: "Comment Created",
   git_context_linked: "Git Context Linked",
-  trigger_ai_review: "AI Review Triggered",
+  trigger_ai_review: "AI Review Generated",
 };
 
 const ENTITY_LABELS = {
@@ -31,14 +53,16 @@ const ENTITY_LABELS = {
   change_request: "Change Request",
   git_context: "Git Context",
   ai_review: "AI Review",
+  audit_log: "Audit Log",
 };
 
 const ACTION_CATEGORIES = {
-  authentication: ["login", "failed_login", "register"],
-  user_management: ["create_user", "deactivate_user", "reactivate_user", "update_user_role", "profile_updated", "password_changed"],
-  change_requests: ["create_change_request", "submit_change_request", "update_change_request", "approve_change_request", "reject_change_request", "escalate_change_request", "delegate_change_request", "apply_change_request", "add_comment"],
-  git: ["git_context_linked"],
-  ai: ["trigger_ai_review"],
+  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED", "login", "failed_login", "register"],
+  user_management: ["USER_CREATED", "USER_DEACTIVATED", "USER_REACTIVATED", "ROLE_ASSIGNED", "ROLE_CHANGED", "PROFILE_UPDATED", "PASSWORD_CHANGED", "create_user", "deactivate_user", "reactivate_user", "update_user_role", "profile_updated", "password_changed"],
+  change_requests: ["REQUEST_CREATED", "REQUEST_SUBMITTED", "REQUEST_UPDATED", "REQUEST_APPROVED", "REQUEST_REJECTED", "REQUEST_ESCALATED", "REQUEST_DELEGATED", "REQUEST_APPLIED", "COMMENT_CREATED", "create_change_request", "submit_change_request", "update_change_request", "approve_change_request", "reject_change_request", "escalate_change_request", "delegate_change_request", "apply_change_request", "add_comment"],
+  git: ["GIT_CONTEXT_LINKED", "git_context_linked"],
+  ai: ["AI_REVIEW_GENERATED", "trigger_ai_review"],
+  admin: ["AUDIT_VIEWED"],
 };
 
 function getCategoryForAction(action) {
@@ -68,6 +92,7 @@ function ActionBadge({ action }) {
     change_requests: "status-badge status-approved",
     git: "status-badge status-escalated",
     ai: "status-badge status-closed",
+    admin: "status-badge status-rejected",
     other: "status-badge",
   };
   return (

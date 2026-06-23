@@ -103,7 +103,7 @@ def update_me(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="profile_updated",
+        action="PROFILE_UPDATED",
         entity_type="user",
         entity_id=current_user.id,
         details="Updated full_name",
@@ -140,7 +140,7 @@ def change_my_password(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="password_changed",
+        action="PASSWORD_CHANGED",
         entity_type="user",
         entity_id=current_user.id,
         details="User changed their own password",
@@ -333,10 +333,18 @@ def create_user(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="create_user",
+        action="USER_CREATED",
         entity_type="user",
         entity_id=new_user.id,
-        details=f"Created user '{new_user.email}' with role_id={new_user.role_id}"
+        details=f"Created user '{new_user.email}'"
+    )
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="ROLE_ASSIGNED",
+        entity_type="user",
+        entity_id=new_user.id,
+        details=f"Assigned role '{new_user.role_id}' to '{new_user.email}'"
     )
     db.commit()
 
@@ -369,7 +377,7 @@ def deactivate_user(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="deactivate_user",
+        action="USER_DEACTIVATED",
         entity_type="user",
         entity_id=user.id,
         details=f"Deactivated user '{user.email}'"
@@ -402,7 +410,7 @@ def reactivate_user(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="reactivate_user",
+        action="USER_REACTIVATED",
         entity_type="user",
         entity_id=user.id,
         details=f"Reactivated user '{user.email}'"
@@ -444,7 +452,7 @@ def update_user_role(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="update_user_role",
+        action="ROLE_CHANGED",
         entity_type="user",
         entity_id=user.id,
         details=f"Changed role for '{user.email}' from '{old_role_name}' to '{new_role.name}'"

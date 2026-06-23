@@ -73,7 +73,7 @@ def create_change_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="create_change_request",
+        action="REQUEST_CREATED",
         entity_type="change_request",
         entity_id=new_request.id,
         details=f"Created request '{new_request.title}' assigned to reviewer_id={new_request.assigned_reviewer_id}"
@@ -91,7 +91,7 @@ def create_change_request(
         log_action(
             db=db,
             user_id=current_user.id,
-            action="git_context_linked",
+            action="GIT_CONTEXT_LINKED",
             entity_type="change_request",
             entity_id=new_request.id,
             request_id=new_request.id,
@@ -192,7 +192,7 @@ def approve_change_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="approve_change_request",
+        action="REQUEST_APPROVED",
         entity_type="change_request",
         entity_id=change_request.id,
         details=(
@@ -254,7 +254,7 @@ def reject_change_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="reject_change_request",
+        action="REQUEST_REJECTED",
         entity_type="change_request",
         entity_id=change_request.id,
         details=(
@@ -349,7 +349,7 @@ def update_change_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="update_change_request",
+        action="REQUEST_UPDATED",
         entity_type="change_request",
         entity_id=change_request.id,
         details="Change request updated"
@@ -386,7 +386,7 @@ def submit_change_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="submit_change_request",
+        action="REQUEST_SUBMITTED",
         entity_type="change_request",
         entity_id=change_request.id,
         details="Submitted for review"
@@ -455,7 +455,7 @@ def add_comment_to_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="add_comment",
+        action="COMMENT_CREATED",
         entity_type="change_request",
         entity_id=request_id,
         details=comment_data.comment_text
@@ -495,7 +495,7 @@ def apply_change_request(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="apply_change_request",
+        action="REQUEST_APPLIED",
         entity_type="change_request",
         entity_id=change_request.id,
         details="Marked request as applied"
