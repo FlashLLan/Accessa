@@ -10,6 +10,7 @@ import RequestDetailsPage from "./pages/RequestDetailsPage";
 import CreateRequestPage from "./pages/CreateRequestPage";
 import ReviewPage from "./pages/ReviewPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import AuditLogPage from "./pages/AuditLogPage";
 import AccountPage from "./pages/AccountPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -35,6 +36,7 @@ function App() {
 
           <Route element={<RoleGuard allowedRoles={["admin"]} />}>
             <Route path="/admin/users" element={<UserManagementPage />} />
+            <Route path="/admin/audit-log" element={<AuditLogPage />} />
           </Route>
         </Route>
       </Route>

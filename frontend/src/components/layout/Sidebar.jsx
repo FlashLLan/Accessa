@@ -33,6 +33,11 @@ export default function Sidebar() {
       label: "User Management",
       roles: ["admin"],
     },
+    {
+      to: "/admin/audit-log",
+      label: "Audit Log",
+      roles: ["admin"],
+    },
   ];
 
   const visibleItems = navItems.filter((item) => item.roles.includes(role));

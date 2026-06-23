@@ -10,6 +10,9 @@ class AuditLogResponse(BaseModel):
     entity_type: str
     entity_id: int
     details: str | None = None
+    severity: str | None = None
+    old_value: str | None = None
+    new_value: str | None = None
     created_at: datetime
     user: UserShortResponse
 
