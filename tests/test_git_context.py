@@ -248,7 +248,7 @@ def test_git_context_not_required_for_any_request_type(client, db, create_user, 
     reviewer = create_user(db, role=senior, label="reviewer")
     login_user(creator)
 
-    for req_type in ["access_change", "configuration_change", "deployment_change", "resource_change"]:
+    for req_type in ["access_change", "configuration_change", "code_change", "security_change", "administrative_change", "deployment_change", "resource_change"]:
         payload = {
             "title": f"Request {req_type}",
             "description": "No git context needed.",
@@ -323,7 +323,7 @@ def test_audit_log_created_for_git_context_linking(client, db, create_user, crea
     log_entry = (
         db.query(AuditLog)
         .filter(
-            AuditLog.action == "git_context_linked",
+            AuditLog.action == "GIT_CONTEXT_LINKED",
             AuditLog.entity_id == request_id,
         )
         .first()
