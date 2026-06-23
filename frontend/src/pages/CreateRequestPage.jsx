@@ -177,6 +177,9 @@ export default function CreateRequestPage() {
             >
               <option value="access_change">Access Change</option>
               <option value="configuration_change">Configuration Change</option>
+              <option value="code_change">Code Change</option>
+              <option value="security_change">Security Change</option>
+              <option value="administrative_change">Administrative Change</option>
               <option value="deployment_change">Deployment Change</option>
               <option value="resource_change">Resource Change</option>
             </select>

@@ -12,6 +12,9 @@ class RoleName(str, enum.Enum):
 class RequestType(str, enum.Enum):
     ACCESS_CHANGE = "access_change"
     CONFIGURATION_CHANGE = "configuration_change"
+    CODE_CHANGE = "code_change"
+    SECURITY_CHANGE = "security_change"
+    ADMINISTRATIVE_CHANGE = "administrative_change"
     DEPLOYMENT_CHANGE = "deployment_change"
     RESOURCE_CHANGE = "resource_change"
 
