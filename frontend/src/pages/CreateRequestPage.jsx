@@ -11,7 +11,7 @@ const initialForm = {
   description: "",
   request_type: "access_change",
   target_system: "",
-  environment: "dev",
+  environment: "development",
   risk_level: "medium",
   assigned_reviewer_id: "",
 };
@@ -193,7 +193,7 @@ export default function CreateRequestPage() {
               value={form.environment}
               onChange={handleChange}
             >
-              <option value="dev">Dev</option>
+              <option value="development">Development</option>
               <option value="staging">Staging</option>
               <option value="production">Production</option>
             </select>

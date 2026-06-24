@@ -140,6 +140,7 @@ def escalate_request(
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,
+        severity="medium",
         details=f"Escalated to reviewer_id={target.id} ({target.full_name})",
     )
     db.commit()
@@ -218,6 +219,7 @@ def delegate_request(
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,
+        severity="medium",
         details=f"Delegated to reviewer_id={target.id} ({target.full_name})",
     )
     db.commit()

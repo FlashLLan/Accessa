@@ -126,6 +126,7 @@ def update_me(
         action="PROFILE_UPDATED",
         entity_type="user",
         entity_id=current_user.id,
+        severity="low",
         details="Updated full_name",
         old_value=old_name,
         new_value=current_user.full_name,
@@ -163,6 +164,7 @@ def change_my_password(
         action="PASSWORD_CHANGED",
         entity_type="user",
         entity_id=current_user.id,
+        severity="high",
         details="User changed their own password",
     )
     db.commit()
@@ -356,6 +358,7 @@ def create_user(
         action="USER_CREATED",
         entity_type="user",
         entity_id=new_user.id,
+        severity="medium",
         details=f"Created user '{new_user.email}'"
     )
     log_action(
@@ -364,6 +367,7 @@ def create_user(
         action="ROLE_ASSIGNED",
         entity_type="user",
         entity_id=new_user.id,
+        severity="medium",
         details=f"Assigned role '{new_user.role_id}' to '{new_user.email}'"
     )
     db.commit()
@@ -400,6 +404,7 @@ def deactivate_user(
         action="USER_DEACTIVATED",
         entity_type="user",
         entity_id=user.id,
+        severity="high",
         details=f"Deactivated user '{user.email}'"
     )
     db.commit()
@@ -433,6 +438,7 @@ def reactivate_user(
         action="USER_REACTIVATED",
         entity_type="user",
         entity_id=user.id,
+        severity="high",
         details=f"Reactivated user '{user.email}'"
     )
     db.commit()
@@ -475,6 +481,7 @@ def update_user_role(
         action="ROLE_CHANGED",
         entity_type="user",
         entity_id=user.id,
+        severity="high",
         details=f"Changed role for '{user.email}' from '{old_role_name}' to '{new_role.name}'"
     )
     db.commit()

@@ -27,6 +27,7 @@ def list_audit_logs(
         action="AUDIT_VIEWED",
         entity_type="audit_log",
         entity_id=current_user.id,
+        severity="low",
         details=f"Admin viewed audit log ({len(logs)} entries)",
     )
     db.commit()

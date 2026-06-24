@@ -20,7 +20,7 @@ class RequestType(str, enum.Enum):
 
 
 class EnvironmentType(str, enum.Enum):
-    DEV = "dev"
+    DEV = "development"
     STAGING = "staging"
     PRODUCTION = "production"
 
@@ -56,3 +56,4 @@ class ReviewActionType(str, enum.Enum):
     COMMENT = "comment"
     ASSIGN = "assign"
     RETURN_FOR_CHANGES = "return_for_changes"
+    START_REVIEW = "start_review"

@@ -77,6 +77,7 @@ def trigger_ai_review(
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,
+        severity="low",
         details=f"AI review triggered (stub) for request {request_id}",
     )
     db.commit()

@@ -254,7 +254,7 @@ def test_git_context_not_required_for_any_request_type(client, db, create_user, 
             "description": "No git context needed.",
             "request_type": req_type,
             "target_system": "Some System",
-            "environment": "dev",
+            "environment": "development",
             "risk_level": "low",
             "assigned_reviewer_id": reviewer.id,
         }

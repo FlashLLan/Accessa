@@ -76,6 +76,7 @@ def create_change_request(
         action="REQUEST_CREATED",
         entity_type="change_request",
         entity_id=new_request.id,
+        severity="low",
         details=f"Created request '{new_request.title}' assigned to reviewer_id={new_request.assigned_reviewer_id}"
     )
     db.commit()
@@ -95,6 +96,7 @@ def create_change_request(
             entity_type="change_request",
             entity_id=new_request.id,
             request_id=new_request.id,
+            severity="low",
             details=(
                 f"Git context linked: "
                 f"repo={gc.repository_url or '-'}, "
@@ -195,10 +197,11 @@ def approve_change_request(
         action="REQUEST_APPROVED",
         entity_type="change_request",
         entity_id=change_request.id,
+        severity="high",
         details=(
             f"Approved | approver_role={current_user.role.name} | "
             f"requester_role={change_request.creator.role.name} | "
-            f"severity={change_request.risk_level.value} | "
+            f"risk_level={change_request.risk_level.value} | "
             f"comment={action.decision_comment or 'none'}"
         )
     )
@@ -257,10 +260,11 @@ def reject_change_request(
         action="REQUEST_REJECTED",
         entity_type="change_request",
         entity_id=change_request.id,
+        severity="high",
         details=(
             f"Rejected | approver_role={current_user.role.name} | "
             f"requester_role={change_request.creator.role.name} | "
-            f"severity={change_request.risk_level.value} | "
+            f"risk_level={change_request.risk_level.value} | "
             f"comment={action.decision_comment or 'none'}"
         )
     )
@@ -352,6 +356,7 @@ def update_change_request(
         action="REQUEST_UPDATED",
         entity_type="change_request",
         entity_id=change_request.id,
+        severity="low",
         details="Change request updated"
     )
     db.commit()
@@ -389,6 +394,7 @@ def submit_change_request(
         action="REQUEST_SUBMITTED",
         entity_type="change_request",
         entity_id=change_request.id,
+        severity="medium",
         details="Submitted for review"
     )
     db.commit()
@@ -458,6 +464,7 @@ def add_comment_to_request(
         action="COMMENT_CREATED",
         entity_type="change_request",
         entity_id=request_id,
+        severity="low",
         details=comment_data.comment_text
     )
     db.commit()
@@ -498,6 +505,7 @@ def apply_change_request(
         action="REQUEST_APPLIED",
         entity_type="change_request",
         entity_id=change_request.id,
+        severity="high",
         details="Marked request as applied"
     )
     db.commit()

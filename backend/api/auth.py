@@ -30,7 +30,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             action="LOGIN_FAILED",
             entity_type="user",
             entity_id=user.id,
-            severity="warning",
+            severity="medium",
             details=f"Failed login attempt for '{user.email}'",
         )
         db.commit()
@@ -46,6 +46,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         action="LOGIN_SUCCESS",
         entity_type="user",
         entity_id=user.id,
+        severity="low",
         details=f"User '{user.email}' logged in",
     )
     db.commit()
@@ -81,6 +82,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         action="USER_CREATED",
         entity_type="user",
         entity_id=new_user.id,
+        severity="medium",
         details=f"User '{new_user.email}' self-registered",
     )
     db.commit()
