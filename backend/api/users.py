@@ -32,13 +32,33 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/", response_model=list[UserResponse])
 def list_users(
+    search: str | None = Query(None),
+    role: str | None = Query(None),
+    status: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view all users")
 
-    return db.query(User).all()
+    query = db.query(User).join(Role)
+
+    if search:
+        term = f"%{search.lower()}%"
+        query = query.filter(
+            func.lower(User.full_name).like(term) |
+            func.lower(User.email).like(term)
+        )
+
+    if role:
+        query = query.filter(Role.name == role)
+
+    if status == "active":
+        query = query.filter(User.is_active == True)
+    elif status == "inactive":
+        query = query.filter(User.is_active == False)
+
+    return query.all()
 
 
 @router.get("/me", response_model=UserResponse)

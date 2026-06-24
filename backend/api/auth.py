@@ -20,6 +20,9 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Account is inactive")
+
     if not verify_password(data.password, user.hashed_password):
         log_action(
             db=db,
