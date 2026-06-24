@@ -25,12 +25,17 @@ export default function LoginPage() {
     } catch (error) {
       console.error("Login failed", error);
 
-      const message =
-        error?.response?.data?.detail ||
-        error?.message ||
-        "Login failed. Please try again.";
+      const status = error?.response?.status;
+      const detail = error?.response?.data?.detail;
 
-      setError(String(message));
+      const message =
+        status === 429
+          ? "Too many login attempts. Please wait a moment and try again."
+          : detail === "Account is inactive"
+          ? "This account has been deactivated. Contact your administrator."
+          : "Invalid email or password.";
+
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
