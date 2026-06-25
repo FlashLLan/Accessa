@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Toast from "../components/common/Toast";
 import { extractApiError } from "../utils/apiError";
 import { getAuditLogs } from "../api/auditLogs";
+import { parseUtcDate } from "../utils/requestPresentation";
 
 const ACTION_LABELS = {
   LOGIN_SUCCESS: "Login",
@@ -74,7 +75,7 @@ function getCategoryForAction(action) {
 
 function formatDateTime(value) {
   if (!value) return "-";
-  const date = new Date(value);
+  const date = parseUtcDate(value);
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
