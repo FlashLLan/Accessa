@@ -37,10 +37,11 @@ def get_current_user(
     return user
 
 
+# Only the system administrator may create user accounts. Non-admin roles have no creation rights.
 USER_CREATION_RULES = {
     "admin": ["junior", "mid", "senior", "lead", "admin"],
-    "lead": ["junior", "mid", "senior"],
-    "senior": ["junior"],
+    "lead": [],
+    "senior": [],
     "mid": [],
     "junior": [],
 }
