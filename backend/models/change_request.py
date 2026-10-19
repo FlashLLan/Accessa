@@ -1,9 +1,8 @@
-from datetime import datetime
-
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, ForeignKeyConstraint, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from database.base import Base
+from backend.core.timeutils import utc_now
 from backend.models.enums import (
     EnvironmentType,
     RequestStatus,
@@ -14,42 +13,58 @@ from backend.models.enums import (
 
 class ChangeRequest(Base):
     __tablename__ = "change_requests"
+    __table_args__ = (
+        # Composite foreign keys: every user a request points at must belong to the
+        # request's own workspace. Enforced by the database, independently of the
+        # application code. current_reviewer_id is nullable; with the default
+        # MATCH SIMPLE semantics a NULL there skips the check.
+        ForeignKeyConstraint(["workspace_id", "created_by"], ["users.workspace_id", "users.id"]),
+        ForeignKeyConstraint(["workspace_id", "assigned_reviewer_id"], ["users.workspace_id", "users.id"]),
+        ForeignKeyConstraint(["workspace_id", "current_reviewer_id"], ["users.workspace_id", "users.id"]),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
-    request_type = Column(Enum(RequestType), nullable=False)
+    request_type = Column(Enum(RequestType, name="request_type", native_enum=False, create_constraint=True), nullable=False)
     target_system = Column(String, nullable=False)
-    environment = Column(Enum(EnvironmentType), nullable=False)
-    risk_level = Column(Enum(RiskLevel), nullable=False)
-    status = Column(Enum(RequestStatus), default=RequestStatus.DRAFT, nullable=False)
-    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
+    environment = Column(Enum(EnvironmentType, name="environment", native_enum=False, create_constraint=True), nullable=False)
+    risk_level = Column(Enum(RiskLevel, name="risk_level", native_enum=False, create_constraint=True), nullable=False)
+    status = Column(
+        Enum(RequestStatus, name="request_status", native_enum=False, create_constraint=True),
+        default=RequestStatus.DRAFT,
+        nullable=False,
+    )
 
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    assigned_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    current_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by = Column(Integer, nullable=False)
+    assigned_reviewer_id = Column(Integer, nullable=False)
+    current_reviewer_id = Column(Integer, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    submitted_at = Column(DateTime, nullable=True)
-    closed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    submitted_at = Column(DateTime(timezone=True), nullable=True)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
 
     creator = relationship(
         "User",
         back_populates="created_requests",
-        foreign_keys=[created_by]
+        primaryjoin="User.id == ChangeRequest.created_by",
+        foreign_keys=[created_by],
     )
 
     assigned_reviewer = relationship(
         "User",
         back_populates="assigned_reviews",
-        foreign_keys=[assigned_reviewer_id]
+        primaryjoin="User.id == ChangeRequest.assigned_reviewer_id",
+        foreign_keys=[assigned_reviewer_id],
     )
 
     current_reviewer = relationship(
         "User",
         back_populates="current_reviews",
-        foreign_keys=[current_reviewer_id]
+        primaryjoin="User.id == ChangeRequest.current_reviewer_id",
+        foreign_keys=[current_reviewer_id],
     )
 
     comments = relationship("Comment", back_populates="change_request", cascade="all, delete-orphan")

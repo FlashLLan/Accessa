@@ -25,7 +25,7 @@ def _make_user_with_password(db, role, label, password="password123"):
         email=f"{label}@test.com",
         hashed_password=_fake_hash(password),
         role_id=role.id,
-        room_id=1,
+        workspace_id=1,
         is_active=True,
     )
     db.add(user)
@@ -329,7 +329,7 @@ def test_inactive_user_cannot_access_me(client, db, create_user, create_role):
 
     # Issue a real JWT for the inactive user, then call the endpoint
     # without overriding get_current_user so the real dependency runs.
-    token = create_access_token({"sub": str(user.id), "room": user.room.public_id})
+    token = create_access_token({"sub": str(user.id), "workspace": str(user.workspace.public_id)})
 
     def override_get_db():
         yield db

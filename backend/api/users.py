@@ -1,14 +1,13 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from database.db import get_db
 from backend.models.user import User
 from backend.models.role import Role
-from backend.core.dependencies import get_current_user, can_create_role, room_users
+from backend.core.dependencies import get_current_user, can_create_role, workspace_users
 from backend.core.security import hash_password, verify_password
 from backend.services.audit_service import log_action
+from backend.core.timeutils import utc_now
 from sqlalchemy import func
 from backend.models.change_request import ChangeRequest
 from backend.models.approval import Approval
@@ -42,7 +41,7 @@ def list_users(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view all users")
 
-    query = room_users(db, current_user).join(Role)
+    query = workspace_users(db, current_user).join(Role)
 
     if search:
         term = f"%{search.lower()}%"
@@ -85,7 +84,7 @@ def list_reviewers(
         role_filter = Role.name.in_(["mid", "senior", "lead"])
 
     reviewers = (
-        room_users(db, current_user)
+        workspace_users(db, current_user)
         .join(Role)
         .filter(
             User.is_active == True,
@@ -108,7 +107,7 @@ def update_me(
     if not full_name:
         raise HTTPException(status_code=400, detail="Full name cannot be empty.")
 
-    existing = room_users(db, current_user).filter(
+    existing = workspace_users(db, current_user).filter(
         func.lower(User.full_name) == full_name.lower(),
         User.id != current_user.id,
     ).first()
@@ -117,7 +116,7 @@ def update_me(
 
     old_name = current_user.full_name
     current_user.full_name = full_name
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     db.commit()
     db.refresh(current_user)
 
@@ -156,7 +155,7 @@ def change_my_password(
         raise HTTPException(status_code=400, detail="New password must be different from the current password.")
 
     current_user.hashed_password = hash_password(payload.new_password)
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     db.commit()
 
     log_action(
@@ -298,7 +297,7 @@ def get_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    user = room_users(db, current_user).filter(User.id == user_id).first()
+    user = workspace_users(db, current_user).filter(User.id == user_id).first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -322,7 +321,7 @@ def create_user(
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    existing_name = room_users(db, current_user).filter(
+    existing_name = workspace_users(db, current_user).filter(
         func.lower(User.full_name) == user_data.full_name.strip().lower()
     ).first()
     if existing_name:
@@ -346,7 +345,7 @@ def create_user(
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
         role_id=user_data.role_id,
-        room_id=current_user.room_id,
+        workspace_id=current_user.workspace_id,
         created_by=current_user.id,
         is_active=True
     )
@@ -386,7 +385,7 @@ def deactivate_user(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can deactivate users")
 
-    user = room_users(db, current_user).filter(User.id == user_id).first()
+    user = workspace_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -397,7 +396,7 @@ def deactivate_user(
         raise HTTPException(status_code=400, detail="User is already inactive")
 
     user.is_active = False
-    user.deactivated_at = datetime.utcnow()
+    user.deactivated_at = utc_now()
     db.commit()
     db.refresh(user)
 
@@ -424,7 +423,7 @@ def reactivate_user(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can reactivate users")
 
-    user = room_users(db, current_user).filter(User.id == user_id).first()
+    user = workspace_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -458,7 +457,7 @@ def update_user_role(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can change user roles")
 
-    user = room_users(db, current_user).filter(User.id == user_id).first()
+    user = workspace_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -500,7 +499,7 @@ def get_user_details(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view user details")
 
-    user = room_users(db, current_user).filter(User.id == user_id).first()
+    user = workspace_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 

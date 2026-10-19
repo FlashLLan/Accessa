@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.change_request import ChangeRequest
 from backend.models.git_context import GitContext
-from backend.core.dependencies import get_current_user, get_room_request_or_404
+from backend.core.dependencies import get_current_user, get_workspace_request_or_404
 from backend.models.user import User
 from backend.schemas.git_context import GitContextCreate, GitContextResponse
 from backend.services.audit_service import log_action
@@ -30,7 +30,7 @@ def get_git_context(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cr = get_room_request_or_404(db, request_id, current_user)
+    cr = get_workspace_request_or_404(db, request_id, current_user)
     _check_access(cr, current_user)
 
     if not cr.git_context:
@@ -46,7 +46,7 @@ def upsert_git_context(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cr = get_room_request_or_404(db, request_id, current_user)
+    cr = get_workspace_request_or_404(db, request_id, current_user)
     _check_access(cr, current_user)
 
     if cr.git_context:

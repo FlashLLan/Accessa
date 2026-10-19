@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from itertools import count
 
 import pytest
@@ -12,7 +12,7 @@ from backend.core.dependencies import get_current_user
 from backend.models.change_request import ChangeRequest
 from backend.models.user import User
 from backend.models.role import Role
-from backend.models.room import Room
+from backend.models.workspace import Workspace
 from backend.models.approval import Approval
 from backend.models.enums import RequestStatus, RequestType, EnvironmentType, RiskLevel
 from database.db import Base, get_db
@@ -34,8 +34,8 @@ def db():
     Base.metadata.create_all(bind=engine)
 
     session = TestingSessionLocal()
-    # Every test gets a default room (id=1); users without an explicit room land in it.
-    session.add(Room(id=1, public_id="100000000001", name="Default Test Room"))
+    # Every test gets a default workspace (id=1); users without an explicit workspace land in it.
+    session.add(Workspace(id=1, slug="default-test", name="Default Test Workspace"))
     session.commit()
     try:
         yield session
@@ -73,7 +73,7 @@ def _guess_required_value(column_name, column_type, *, label="x", role_id=None):
         return True
 
     if isinstance(column_type, DateTime):
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
     if isinstance(column_type, Integer):
         return 1
@@ -141,23 +141,23 @@ def create_role():
 
 
 @pytest.fixture
-def create_room():
-    def _create_room(db, name, public_id):
-        room = Room(name=name, public_id=public_id)
-        db.add(room)
+def create_workspace():
+    def _create_workspace(db, name, slug):
+        workspace = Workspace(name=name, slug=slug)
+        db.add(workspace)
         db.commit()
-        db.refresh(room)
-        return room
-    return _create_room
+        db.refresh(workspace)
+        return workspace
+    return _create_workspace
 
 
 @pytest.fixture
 def create_user():
-    def _create_user(db, *, role, label, room=None):
+    def _create_user(db, *, role, label, workspace=None):
         user = _insert_row(
             db,
             User,
-            overrides={"role_id": role.id, "room_id": room.id if room else 1},
+            overrides={"role_id": role.id, "workspace_id": workspace.id if workspace else 1},
             label=label,
         )
         db.refresh(user)
@@ -195,7 +195,7 @@ def seed_change_request():
             status=status,
             created_by=creator_id,
             assigned_reviewer_id=reviewer_id,
-            room_id=db.get(User, creator_id).room_id,
+            workspace_id=db.get(User, creator_id).workspace_id,
         )
         db.add(req)
         db.commit()

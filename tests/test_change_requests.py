@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from itertools import count
 
 import pytest
@@ -78,7 +78,7 @@ def _guess_required_value(column_name, column_type, *, label="x", role_id=None):
         return True
 
     if isinstance(column_type, DateTime):
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
     if isinstance(column_type, Integer):
         # fallback for non-null ints that are not PK/autoincrement
@@ -189,7 +189,7 @@ def seed_change_request(
         status=status,
         created_by=creator_id,
         assigned_reviewer_id=reviewer_id,
-        room_id=1,
+        workspace_id=1,
     )
     db.add(req)
     db.commit()

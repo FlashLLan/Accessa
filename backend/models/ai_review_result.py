@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text
 from sqlalchemy.orm import relationship
 
 from database.base import Base
+from backend.core.timeutils import utc_now
 
 
 class AIReviewResult(Base):
@@ -20,6 +19,6 @@ class AIReviewResult(Base):
     improvement_suggestions = Column(Text, nullable=True) # JSON array string
     model_name = Column(Text, nullable=True)
     prompt_version = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     change_request = relationship("ChangeRequest", back_populates="ai_review_results")

@@ -128,13 +128,13 @@ export default function AccountPage() {
 
         <div className="details-grid" style={{ marginBottom: "20px" }}>
           <div className="detail-box">
-            <span className="detail-label">Room</span>
-            <strong>{user?.room?.name || "—"}</strong>
+            <span className="detail-label">Workspace</span>
+            <strong>{user?.workspace?.name || "—"}</strong>
           </div>
           <div className="detail-box">
-            <span className="detail-label">Room ID</span>
+            <span className="detail-label">Workspace ID</span>
             <strong style={{ fontFamily: "monospace", letterSpacing: "0.05em" }}>
-              {user?.room?.public_id || "—"}
+              {user?.workspace?.public_id || "—"}
             </strong>
           </div>
           <div className="detail-box">

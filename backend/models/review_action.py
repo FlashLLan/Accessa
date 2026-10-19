@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, Text
 from sqlalchemy.orm import relationship
 
 from database.base import Base
+from backend.core.timeutils import utc_now
 from backend.models.enums import ReviewActionType
 
 
@@ -13,12 +12,12 @@ class ReviewAction(Base):
     id = Column(Integer, primary_key=True, index=True)
     change_request_id = Column(Integer, ForeignKey("change_requests.id"), nullable=False)
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    action_type = Column(Enum(ReviewActionType), nullable=False)
+    action_type = Column(Enum(ReviewActionType, name="review_action_type", native_enum=False, create_constraint=True), nullable=False)
     target_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     from_status = Column(Text, nullable=True)
     to_status = Column(Text, nullable=True)
     comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     change_request = relationship("ChangeRequest", back_populates="review_actions")
     actor = relationship("User", back_populates="review_actions_as_actor", foreign_keys=[actor_id])

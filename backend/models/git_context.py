@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text
 from sqlalchemy.orm import relationship
 
 from database.base import Base
+from backend.core.timeutils import utc_now
 
 
 class GitContext(Base):
@@ -21,7 +20,7 @@ class GitContext(Base):
     merge_request_url = Column(Text, nullable=True)
     changed_files_summary = Column(Text, nullable=True)
     diff_text = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     change_request = relationship("ChangeRequest", back_populates="git_context")

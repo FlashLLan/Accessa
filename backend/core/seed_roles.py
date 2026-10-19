@@ -1,13 +1,16 @@
-from sqlalchemy.orm import Session
+"""Seed the five global roles. Run after `alembic upgrade head`:  python -m backend.core.seed_roles"""
+from dotenv import load_dotenv
 
-from database.db import SessionLocal, engine, Base
-import backend.models
-from backend.models.role import Role
+load_dotenv()
+
+from sqlalchemy.orm import Session  # noqa: E402
+
+from database.db import SessionLocal  # noqa: E402
+import backend.models  # noqa: E402,F401
+from backend.models.role import Role  # noqa: E402
 
 
 def seed_roles():
-    Base.metadata.create_all(bind=engine)
-
     db: Session = SessionLocal()
 
     roles = [

@@ -1,8 +1,10 @@
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import bcrypt
 from jose import jwt
+
+from backend.core.timeutils import utc_now
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
@@ -23,9 +25,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(data: dict):
-    """`data` must contain `sub` (user id) and `room` (room public id)."""
+    """`data` must contain `sub` (user id) and `workspace` (workspace public id)."""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = utc_now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

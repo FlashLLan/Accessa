@@ -21,7 +21,7 @@ def list_audit_logs(
 
     logs = (
         db.query(AuditLog)
-        .filter(AuditLog.room_id == current_user.room_id)
+        .filter(AuditLog.workspace_id == current_user.workspace_id)
         .order_by(AuditLog.created_at.desc())
         .all()
     )

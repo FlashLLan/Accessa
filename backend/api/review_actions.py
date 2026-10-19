@@ -7,7 +7,7 @@ from backend.models.change_request import ChangeRequest
 from backend.models.review_action import ReviewAction
 from backend.models.user import User
 from backend.models.enums import RequestStatus, ReviewActionType
-from backend.core.dependencies import get_current_user, get_room_request_or_404, room_users
+from backend.core.dependencies import get_current_user, get_workspace_request_or_404, workspace_users
 from backend.schemas.review_action import ReviewActionResponse
 from backend.services.approval_service import get_allowed_approver_roles
 from backend.services.audit_service import log_action
@@ -34,7 +34,7 @@ def _check_access(cr: ChangeRequest, current_user: User):
 
 
 def _get_target_reviewer(target_id: int, current_user: User, db: Session) -> User:
-    target = room_users(db, current_user).filter(User.id == target_id, User.is_active == True).first()
+    target = workspace_users(db, current_user).filter(User.id == target_id, User.is_active == True).first()
     if not target:
         raise HTTPException(status_code=404, detail="Target reviewer not found or inactive")
     if target.id == current_user.id:
@@ -57,7 +57,7 @@ def list_review_actions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cr = get_room_request_or_404(db, request_id, current_user)
+    cr = get_workspace_request_or_404(db, request_id, current_user)
     _check_access(cr, current_user)
 
     return (
@@ -75,7 +75,7 @@ def escalate_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cr = get_room_request_or_404(db, request_id, current_user)
+    cr = get_workspace_request_or_404(db, request_id, current_user)
 
     if current_user.role.name != "admin":
         if cr.assigned_reviewer_id != current_user.id and cr.current_reviewer_id != current_user.id:
@@ -148,7 +148,7 @@ def delegate_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cr = get_room_request_or_404(db, request_id, current_user)
+    cr = get_workspace_request_or_404(db, request_id, current_user)
 
     if current_user.role.name != "admin":
         if cr.assigned_reviewer_id != current_user.id and cr.current_reviewer_id != current_user.id:

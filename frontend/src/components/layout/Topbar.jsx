@@ -13,7 +13,7 @@ export default function Topbar() {
   return (
     <header className="topbar">
       <div>
-        <p className="topbar-kicker">{user?.room?.name || "Change Management Platform"}</p>
+        <p className="topbar-kicker">{user?.workspace?.name || "Change Management Platform"}</p>
         <h1 className="topbar-title">Welcome back</h1>
       </div>
 

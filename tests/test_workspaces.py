@@ -5,7 +5,7 @@ import pytest
 from backend.core.security import create_access_token
 from backend.models.audit_log import AuditLog
 from backend.models.enums import RequestStatus, RiskLevel
-from backend.models.room import Room, generate_room_public_id
+from backend.models.workspace import Workspace
 from backend.models.user import User
 
 
@@ -14,8 +14,9 @@ def _fake_hash(password):
 
 
 SIGNUP = {
-    "room_name": "Platform Team",
-    "full_name": "Room Owner",
+    "workspace_name": "Platform Team",
+    "workspace_slug": "platform-team",
+    "full_name": "Workspace Owner",
     "email": "owner@platform.com",
     "password": "StrongPass1!",
 }
@@ -30,33 +31,33 @@ def roles(db, create_role):
 
 
 @pytest.fixture
-def two_rooms(db, roles, create_room, create_user):
-    """Room A is the default test room (id=1); room B is a second, unrelated tenant."""
-    room_a = db.get(Room, 1)
-    room_b = create_room(db, "Other Team", "200000000002")
+def two_workspaces(db, roles, create_workspace, create_user):
+    """Workspace A is the default test workspace (id=1); workspace B is a second, unrelated tenant."""
+    workspace_a = db.get(Workspace, 1)
+    workspace_b = create_workspace(db, "Other Team", "other-team")
     return {
-        "room_a": room_a,
-        "room_b": room_b,
-        "admin_a": create_user(db, role=roles["admin"], label="admin_a", room=room_a),
-        "junior_a": create_user(db, role=roles["junior"], label="junior_a", room=room_a),
-        "admin_b": create_user(db, role=roles["admin"], label="admin_b", room=room_b),
-        "junior_b": create_user(db, role=roles["junior"], label="junior_b", room=room_b),
-        "mid_b": create_user(db, role=roles["mid"], label="mid_b", room=room_b),
+        "workspace_a": workspace_a,
+        "workspace_b": workspace_b,
+        "admin_a": create_user(db, role=roles["admin"], label="admin_a", workspace=workspace_a),
+        "junior_a": create_user(db, role=roles["junior"], label="junior_a", workspace=workspace_a),
+        "admin_b": create_user(db, role=roles["admin"], label="admin_b", workspace=workspace_b),
+        "junior_b": create_user(db, role=roles["junior"], label="junior_b", workspace=workspace_b),
+        "mid_b": create_user(db, role=roles["mid"], label="mid_b", workspace=workspace_b),
     }
 
 
-# --- room public id ------------------------------------------------------
+# --- workspace public id -------------------------------------------------
 
-def test_room_public_id_is_12_random_digits():
-    ids = {generate_room_public_id() for _ in range(200)}
-    assert len(ids) == 200
-    for public_id in ids:
-        assert len(public_id) == 12 and public_id.isdigit() and public_id[0] != "0"
+def test_workspace_public_id_is_random_uuid4(db, create_workspace):
+    first = create_workspace(db, "One", "one-ws")
+    second = create_workspace(db, "Two", "two-ws")
+    assert first.public_id.version == 4
+    assert first.public_id != second.public_id
 
 
 # --- signup --------------------------------------------------------------
 
-def test_signup_creates_room_and_sysadmin(client, db, roles):
+def test_signup_creates_workspace_and_sysadmin(client, db, roles):
     with patch("backend.api.auth.hash_password", side_effect=_fake_hash):
         response = client.post("/auth/signup", json=SIGNUP)
 
@@ -67,14 +68,14 @@ def test_signup_creates_room_and_sysadmin(client, db, roles):
     assert me.status_code == 200, me.text
     body = me.json()
     assert body["role"]["name"] == "admin"
-    assert body["room"]["name"] == "Platform Team"
-    assert len(body["room"]["public_id"]) == 12
-    assert "id" not in body["room"]
+    assert body["workspace"]["name"] == "Platform Team"
+    assert body["workspace"]["slug"] == "platform-team"
+    assert "id" not in body["workspace"]
 
     owner = db.query(User).filter(User.email == SIGNUP["email"]).one()
-    assert owner.room.public_id == body["room"]["public_id"]
-    actions = {log.action for log in db.query(AuditLog).filter(AuditLog.room_id == owner.room_id)}
-    assert {"ROOM_CREATED", "USER_CREATED"} <= actions
+    assert str(owner.workspace.public_id) == body["workspace"]["public_id"]
+    actions = {log.action for log in db.query(AuditLog).filter(AuditLog.workspace_id == owner.workspace_id)}
+    assert {"WORKSPACE_CREATED", "USER_CREATED"} <= actions
 
 
 def test_signup_rejects_existing_email(client, db, roles, create_user):
@@ -83,13 +84,13 @@ def test_signup_rejects_existing_email(client, db, roles, create_user):
         response = client.post("/auth/signup", json={**SIGNUP, "email": existing.email})
 
     assert response.status_code == 400
-    assert db.query(Room).count() == 1
+    assert db.query(Workspace).count() == 1
 
 
 def test_signup_rejects_short_password(client, db, roles):
     response = client.post("/auth/signup", json={**SIGNUP, "password": "short"})
     assert response.status_code == 400
-    assert db.query(Room).count() == 1
+    assert db.query(Workspace).count() == 1
 
 
 def test_old_self_register_endpoint_is_gone(client, db, roles):
@@ -102,27 +103,27 @@ def test_old_self_register_endpoint_is_gone(client, db, roles):
 
 # --- token binding -------------------------------------------------------
 
-def test_token_without_room_claim_is_rejected(client, two_rooms):
-    token = create_access_token({"sub": str(two_rooms["admin_a"].id)})
+def test_token_without_workspace_claim_is_rejected(client, two_workspaces):
+    token = create_access_token({"sub": str(two_workspaces["admin_a"].id)})
     response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
-def test_token_with_wrong_room_claim_is_rejected(client, two_rooms):
-    token = create_access_token({"sub": str(two_rooms["admin_a"].id), "room": two_rooms["room_b"].public_id})
+def test_token_with_wrong_workspace_claim_is_rejected(client, two_workspaces):
+    token = create_access_token({"sub": str(two_workspaces["admin_a"].id), "workspace": str(two_workspaces["workspace_b"].public_id)})
     response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
 # --- user isolation ------------------------------------------------------
 
-def test_admin_lists_only_users_of_own_room(client, two_rooms, login_user):
-    login_user(two_rooms["admin_a"])
+def test_admin_lists_only_users_of_own_workspace(client, two_workspaces, login_user):
+    login_user(two_workspaces["admin_a"])
     response = client.get("/users/")
 
     assert response.status_code == 200
     emails = {u["email"] for u in response.json()}
-    assert emails == {two_rooms["admin_a"].email, two_rooms["junior_a"].email}
+    assert emails == {two_workspaces["admin_a"].email, two_workspaces["junior_a"].email}
 
 
 @pytest.mark.parametrize("method,path", [
@@ -131,24 +132,24 @@ def test_admin_lists_only_users_of_own_room(client, two_rooms, login_user):
     ("patch", "/users/{id}/deactivate"),
     ("patch", "/users/{id}/reactivate"),
 ])
-def test_admin_cannot_touch_users_of_another_room(client, two_rooms, login_user, method, path):
-    login_user(two_rooms["admin_a"])
-    response = getattr(client, method)(path.format(id=two_rooms["junior_b"].id))
+def test_admin_cannot_touch_users_of_another_workspace(client, two_workspaces, login_user, method, path):
+    login_user(two_workspaces["admin_a"])
+    response = getattr(client, method)(path.format(id=two_workspaces["junior_b"].id))
     assert response.status_code == 404
 
 
-def test_admin_cannot_change_role_of_user_in_another_room(client, db, roles, two_rooms, login_user):
-    login_user(two_rooms["admin_a"])
+def test_admin_cannot_change_role_of_user_in_another_workspace(client, db, roles, two_workspaces, login_user):
+    login_user(two_workspaces["admin_a"])
     response = client.patch(
-        f"/users/{two_rooms['junior_b'].id}/role", json={"role_id": roles["lead"].id}
+        f"/users/{two_workspaces['junior_b'].id}/role", json={"role_id": roles["lead"].id}
     )
     assert response.status_code == 404
-    db.refresh(two_rooms["junior_b"])
-    assert two_rooms["junior_b"].role.name == "junior"
+    db.refresh(two_workspaces["junior_b"])
+    assert two_workspaces["junior_b"].role.name == "junior"
 
 
-def test_created_user_joins_creators_room(client, db, roles, two_rooms, login_user):
-    login_user(two_rooms["admin_b"])
+def test_created_user_joins_creators_workspace(client, db, roles, two_workspaces, login_user):
+    login_user(two_workspaces["admin_b"])
     with patch("backend.api.users.hash_password", side_effect=_fake_hash):
         response = client.post("/users/", json={
             "full_name": "New Hire",
@@ -159,15 +160,15 @@ def test_created_user_joins_creators_room(client, db, roles, two_rooms, login_us
 
     assert response.status_code == 200, response.text
     new_user = db.get(User, response.json()["id"])
-    assert new_user.room_id == two_rooms["room_b"].id
-    assert new_user.created_by == two_rooms["admin_b"].id
+    assert new_user.workspace_id == two_workspaces["workspace_b"].id
+    assert new_user.created_by == two_workspaces["admin_b"].id
 
 
-def test_full_name_only_has_to_be_unique_within_a_room(client, db, roles, two_rooms, login_user):
-    login_user(two_rooms["admin_a"])
+def test_full_name_only_has_to_be_unique_within_a_workspace(client, db, roles, two_workspaces, login_user):
+    login_user(two_workspaces["admin_a"])
     with patch("backend.api.users.hash_password", side_effect=_fake_hash):
         response = client.post("/users/", json={
-            "full_name": two_rooms["junior_b"].full_name,
+            "full_name": two_workspaces["junior_b"].full_name,
             "email": "namesake@test.com",
             "password": "Password123",
             "role_id": roles["junior"].id,
@@ -175,27 +176,27 @@ def test_full_name_only_has_to_be_unique_within_a_room(client, db, roles, two_ro
     assert response.status_code == 200, response.text
 
 
-def test_reviewer_list_excludes_other_rooms(client, two_rooms, login_user):
-    login_user(two_rooms["junior_a"])
+def test_reviewer_list_excludes_other_workspaces(client, two_workspaces, login_user):
+    login_user(two_workspaces["junior_a"])
     response = client.get("/users/reviewers")
     assert response.status_code == 200
-    assert two_rooms["mid_b"].id not in {u["id"] for u in response.json()}
+    assert two_workspaces["mid_b"].id not in {u["id"] for u in response.json()}
 
 
 # --- change request isolation --------------------------------------------
 
 @pytest.fixture
-def request_in_room_b(db, two_rooms, seed_change_request):
+def request_in_workspace_b(db, two_workspaces, seed_change_request):
     return seed_change_request(
         db,
-        creator_id=two_rooms["junior_b"].id,
-        reviewer_id=two_rooms["mid_b"].id,
+        creator_id=two_workspaces["junior_b"].id,
+        reviewer_id=two_workspaces["mid_b"].id,
         status=RequestStatus.PENDING_REVIEW,
     )
 
 
-def test_admin_request_list_excludes_other_rooms(client, two_rooms, request_in_room_b, login_user):
-    login_user(two_rooms["admin_a"])
+def test_admin_request_list_excludes_other_workspaces(client, two_workspaces, request_in_workspace_b, login_user):
+    login_user(two_workspaces["admin_a"])
     response = client.get("/change-requests/")
     assert response.status_code == 200
     assert response.json() == []
@@ -217,11 +218,11 @@ def test_admin_request_list_excludes_other_rooms(client, two_rooms, request_in_r
     ("get", "/change-requests/{id}/ai-review", None),
     ("post", "/change-requests/{id}/ai-review", None),
 ])
-def test_admin_cannot_reach_request_of_another_room(
-    client, two_rooms, request_in_room_b, login_user, method, path, body
+def test_admin_cannot_reach_request_of_another_workspace(
+    client, two_workspaces, request_in_workspace_b, login_user, method, path, body
 ):
-    login_user(two_rooms["admin_a"])
-    url = path.format(id=request_in_room_b.id)
+    login_user(two_workspaces["admin_a"])
+    url = path.format(id=request_in_workspace_b.id)
     kwargs = {"json": body} if body is not None else {}
     response = getattr(client, method)(url, **kwargs)
 
@@ -229,49 +230,49 @@ def test_admin_cannot_reach_request_of_another_room(
     assert response.json()["detail"] == "Change request not found"
 
 
-def test_cannot_assign_reviewer_from_another_room(client, two_rooms, login_user):
-    login_user(two_rooms["junior_a"])
+def test_cannot_assign_reviewer_from_another_workspace(client, two_workspaces, login_user):
+    login_user(two_workspaces["junior_a"])
     response = client.post("/change-requests/", json={
-        "title": "Cross-room",
+        "title": "Cross-workspace",
         "description": "Should fail",
         "request_type": "access_change",
         "target_system": "srv",
         "environment": "development",
         "risk_level": RiskLevel.LOW.value,
-        "assigned_reviewer_id": two_rooms["mid_b"].id,
+        "assigned_reviewer_id": two_workspaces["mid_b"].id,
     })
     assert response.status_code == 400
     assert response.json()["detail"] == "Assigned reviewer not found"
 
 
-def test_cannot_delegate_to_user_in_another_room(
-    client, db, roles, two_rooms, create_user, seed_change_request, login_user
+def test_cannot_delegate_to_user_in_another_workspace(
+    client, db, roles, two_workspaces, create_user, seed_change_request, login_user
 ):
-    mid_a = create_user(db, role=roles["mid"], label="mid_a", room=two_rooms["room_a"])
+    mid_a = create_user(db, role=roles["mid"], label="mid_a", workspace=two_workspaces["workspace_a"])
     cr = seed_change_request(
         db,
-        creator_id=two_rooms["junior_a"].id,
+        creator_id=two_workspaces["junior_a"].id,
         reviewer_id=mid_a.id,
         status=RequestStatus.PENDING_REVIEW,
     )
     login_user(mid_a)
     response = client.post(
         f"/change-requests/{cr.id}/delegate",
-        json={"target_reviewer_id": two_rooms["mid_b"].id},
+        json={"target_reviewer_id": two_workspaces["mid_b"].id},
     )
     assert response.status_code == 404
 
 
 # --- audit log isolation -------------------------------------------------
 
-def test_audit_log_only_shows_own_room(client, db, two_rooms, login_user):
-    db.add(AuditLog(user_id=two_rooms["junior_a"].id, room_id=two_rooms["room_a"].id,
+def test_audit_log_only_shows_own_workspace(client, db, two_workspaces, login_user):
+    db.add(AuditLog(user_id=two_workspaces["junior_a"].id, workspace_id=two_workspaces["workspace_a"].id,
                     action="A_EVENT", entity_type="user", entity_id=1))
-    db.add(AuditLog(user_id=two_rooms["junior_b"].id, room_id=two_rooms["room_b"].id,
+    db.add(AuditLog(user_id=two_workspaces["junior_b"].id, workspace_id=two_workspaces["workspace_b"].id,
                     action="B_EVENT", entity_type="user", entity_id=1))
     db.commit()
 
-    login_user(two_rooms["admin_a"])
+    login_user(two_workspaces["admin_a"])
     response = client.get("/audit-logs/")
 
     assert response.status_code == 200
@@ -280,4 +281,4 @@ def test_audit_log_only_shows_own_room(client, db, two_rooms, login_user):
     assert "B_EVENT" not in actions
 
     viewed = db.query(AuditLog).filter(AuditLog.action == "AUDIT_VIEWED").one()
-    assert viewed.room_id == two_rooms["room_a"].id
+    assert viewed.workspace_id == two_workspaces["workspace_a"].id

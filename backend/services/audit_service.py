@@ -17,15 +17,15 @@ def log_action(
     new_value: str | None = None,
     ip_address: str | None = None,
     user_agent: str | None = None,
-    room_id: int | None = None,
+    workspace_id: int | None = None,
 ):
-    # Every audit entry belongs to the actor's room so one room can never read another's trail.
-    if room_id is None:
-        room_id = db.get(User, user_id).room_id
+    # Every audit entry belongs to the actor's workspace so one workspace can never read another's trail.
+    if workspace_id is None:
+        workspace_id = db.get(User, user_id).workspace_id
 
     log_entry = AuditLog(
         user_id=user_id,
-        room_id=room_id,
+        workspace_id=workspace_id,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,

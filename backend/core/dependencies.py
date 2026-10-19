@@ -20,9 +20,9 @@ def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
-        token_room = payload.get("room")
+        token_workspace = payload.get("workspace")
 
-        if user_id is None or token_room is None:
+        if user_id is None or token_workspace is None:
             raise HTTPException(status_code=401, detail="Invalid token")
 
     except JWTError:
@@ -33,8 +33,8 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    # The token is bound to the room it was issued for.
-    if user.room is None or user.room.public_id != token_room:
+    # The token is bound to the workspace it was issued for.
+    if user.workspace is None or str(user.workspace.public_id) != token_workspace:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     if not user.is_active:
@@ -45,20 +45,20 @@ def get_current_user(
 
 # --- Tenant scoping ------------------------------------------------------
 # Every query for tenant-owned data must start from one of these helpers.
-# The room always comes from the authenticated user, never from client input.
-# Rows that belong to another room are simply invisible (callers return 404,
+# The workspace always comes from the authenticated user, never from client input.
+# Rows that belong to another workspace are simply invisible (callers return 404,
 # not 403), so their existence is never revealed.
 
-def room_users(db: Session, current_user: User):
-    return db.query(User).filter(User.room_id == current_user.room_id)
+def workspace_users(db: Session, current_user: User):
+    return db.query(User).filter(User.workspace_id == current_user.workspace_id)
 
 
-def room_requests(db: Session, current_user: User):
-    return db.query(ChangeRequest).filter(ChangeRequest.room_id == current_user.room_id)
+def workspace_requests(db: Session, current_user: User):
+    return db.query(ChangeRequest).filter(ChangeRequest.workspace_id == current_user.workspace_id)
 
 
-def get_room_request_or_404(db: Session, request_id: int, current_user: User) -> ChangeRequest:
-    cr = room_requests(db, current_user).filter(ChangeRequest.id == request_id).first()
+def get_workspace_request_or_404(db: Session, request_id: int, current_user: User) -> ChangeRequest:
+    cr = workspace_requests(db, current_user).filter(ChangeRequest.id == request_id).first()
     if not cr:
         raise HTTPException(status_code=404, detail="Change request not found")
     return cr

@@ -1,22 +1,23 @@
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from database.base import Base
+from backend.core.timeutils import utc_now
 
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False, index=True)
+    # Nullable so a failed login for an unknown email can still be recorded.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     action = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     entity_id = Column(Integer, nullable=False)
     details = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    # Deliberately no foreign key: audit records must outlive what they reference.
     request_id = Column(Integer, nullable=True)
     ip_address = Column(String, nullable=True)
     user_agent = Column(String, nullable=True)

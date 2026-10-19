@@ -48,7 +48,7 @@ export default function LoginPage() {
           <p className="auth-kicker">Accessa</p>
           <h1>Sign in</h1>
           <p className="auth-subtitle">
-            Log in with the account your room administrator created for you.
+            Log in with the account your workspace administrator created for you.
           </p>
         </div>
 

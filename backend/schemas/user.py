@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from backend.schemas.role import RoleResponse
-from backend.schemas.room import RoomResponse
+from backend.schemas.workspace import WorkspaceResponse
 
 
 class UserCreate(BaseModel):
@@ -28,7 +28,7 @@ class UserResponse(BaseModel):
 
 
 class UserMeResponse(UserResponse):
-    room: RoomResponse
+    workspace: WorkspaceResponse
 
 
 class UserShortResponse(BaseModel):
