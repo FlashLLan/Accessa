@@ -35,7 +35,8 @@ def _client_info(request: Request) -> dict:
 
 
 def _issue_token(user: User) -> str:
-    return create_access_token(data={"sub": str(user.id), "workspace_id": user.workspace_id})
+    # The workspace is identified by its public UUID; internal integer ids stay out of tokens.
+    return create_access_token(data={"sub": str(user.id), "workspace": str(user.workspace.public_id)})
 
 
 @router.post("/login", response_model=TokenResponse)

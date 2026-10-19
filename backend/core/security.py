@@ -25,7 +25,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(data: dict):
-    """`data` must contain `sub` (user id) and `workspace_id` (the user's workspace id)."""
+    """`data` must contain `sub` (user id) and `workspace` (the workspace's public UUID)."""
     to_encode = data.copy()
     expire = utc_now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})

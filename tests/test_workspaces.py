@@ -103,15 +103,55 @@ def test_old_self_register_endpoint_is_gone(client, db, roles):
 # --- token binding -------------------------------------------------------
 
 def test_token_without_workspace_claim_is_rejected(client, two_workspaces):
-    token = create_access_token({"sub": str(two_workspaces["admin_a"].id)})  # no workspace_id claim
+    token = create_access_token({"sub": str(two_workspaces["admin_a"].id)})  # no workspace claim
     response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
 def test_token_with_wrong_workspace_claim_is_rejected(client, two_workspaces):
-    token = create_access_token({"sub": str(two_workspaces["admin_a"].id), "workspace_id": two_workspaces["workspace_b"].id})
+    token = create_access_token({"sub": str(two_workspaces["admin_a"].id), "workspace": str(two_workspaces["workspace_b"].public_id)})
     response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
+
+
+def test_token_with_matching_workspace_claim_is_accepted(client, two_workspaces):
+    user = two_workspaces["admin_a"]
+    token = create_access_token({"sub": str(user.id), "workspace": str(two_workspaces["workspace_a"].public_id)})
+    response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("claim", [
+    "not-a-uuid",
+    "00000000-0000-4000-8000-000000000000",  # well-formed but no such workspace
+    1,  # internal integer id is not accepted
+])
+def test_token_with_malformed_or_unknown_workspace_claim_is_rejected(client, two_workspaces, claim):
+    token = create_access_token({"sub": str(two_workspaces["admin_a"].id), "workspace": claim})
+    response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_login_token_carries_workspace_public_id_not_internal_id(client, db, two_workspaces):
+    from jose import jwt as jose_jwt
+    from backend.core.security import ALGORITHM, SECRET_KEY
+
+    user = two_workspaces["junior_a"]
+    user.hashed_password = "TESTHASH:Password123"
+    db.commit()
+
+    with patch("backend.api.auth.verify_password", side_effect=lambda p, h: h == f"TESTHASH:{p}"):
+        response = client.post("/auth/login", json={
+            "workspace_slug": two_workspaces["workspace_a"].slug,
+            "email": user.email,
+            "password": "Password123",
+        })
+
+    assert response.status_code == 200, response.text
+    payload = jose_jwt.decode(response.json()["access_token"], SECRET_KEY, algorithms=[ALGORITHM])
+    assert payload["workspace"] == str(two_workspaces["workspace_a"].public_id)
+    assert "workspace_id" not in payload
+    assert payload["sub"] == str(user.id)
 
 
 # --- user isolation ------------------------------------------------------

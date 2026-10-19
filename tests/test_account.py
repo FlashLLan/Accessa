@@ -329,7 +329,7 @@ def test_inactive_user_cannot_access_me(client, db, create_user, create_role):
 
     # Issue a real JWT for the inactive user, then call the endpoint
     # without overriding get_current_user so the real dependency runs.
-    token = create_access_token({"sub": str(user.id), "workspace_id": user.workspace_id})
+    token = create_access_token({"sub": str(user.id), "workspace": str(user.workspace.public_id)})
 
     def override_get_db():
         yield db

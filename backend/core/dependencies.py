@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -6,6 +8,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.user import User
 from backend.models.change_request import ChangeRequest
+from backend.models.workspace import Workspace
 from backend.core.security import SECRET_KEY, ALGORITHM
 
 security = HTTPBearer()
@@ -32,8 +35,8 @@ def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
-        token_workspace_id = payload["workspace_id"]
-    except (JWTError, KeyError, TypeError, ValueError):
+        token_workspace = UUID(payload["workspace"])
+    except (JWTError, KeyError, TypeError, ValueError, AttributeError):
         raise invalid_token
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -41,8 +44,9 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    # The token is bound to the workspace it was issued for.
-    if not isinstance(token_workspace_id, int) or user.workspace_id != token_workspace_id:
+    # The token is bound to the workspace it was issued for (by public UUID).
+    workspace = db.query(Workspace).filter(Workspace.public_id == token_workspace).first()
+    if workspace is None or workspace.id != user.workspace_id:
         raise invalid_token
 
     if not user.is_active:
