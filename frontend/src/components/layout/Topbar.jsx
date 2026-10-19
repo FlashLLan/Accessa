@@ -1,13 +1,15 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import { workspaceLoginPath } from "../../utils/storage";
 
 export default function Topbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    const slug = user?.workspace?.slug;
     logout();
-    navigate("/login");
+    navigate(workspaceLoginPath(slug));
   };
 
   return (

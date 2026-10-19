@@ -1,7 +1,8 @@
 import client from "./client";
 
-export async function loginRequest({ email, password }) {
+export async function loginRequest({ workspaceSlug, email, password }) {
   const response = await client.post("/auth/login", {
+    workspace_slug: workspaceSlug,
     email,
     password,
   });
@@ -9,9 +10,10 @@ export async function loginRequest({ email, password }) {
   return response.data;
 }
 
-export async function signupRequest({ roomName, fullName, email, password }) {
+export async function signupRequest({ workspaceName, workspaceSlug, fullName, email, password }) {
   const response = await client.post("/auth/signup", {
-    room_name: roomName,
+    workspace_name: workspaceName,
+    workspace_slug: workspaceSlug,
     full_name: fullName,
     email,
     password,

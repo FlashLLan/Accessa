@@ -1,10 +1,13 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { getLastWorkspaceSlug, workspaceLoginPath } from "./utils/storage";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import RoleGuard from "./components/common/RoleGuard";
 import AppLayout from "./components/layout/AppLayout";
 
 import LoginPage from "./pages/LoginPage";
+import FindWorkspacePage from "./pages/FindWorkspacePage";
 import SignupPage from "./pages/SignupPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import RequestsPage from "./pages/RequestsPage";
 import RequestDetailsPage from "./pages/RequestDetailsPage";
@@ -18,11 +21,13 @@ import NotFoundPage from "./pages/NotFoundPage";
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<Navigate to={workspaceLoginPath(getLastWorkspaceSlug())} replace />} />
+      <Route path="/login" element={<FindWorkspacePage />} />
+      <Route path="/w/:slug" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
 
       <Route element={<ProtectedRoute />}>
+        <Route path="/change-password" element={<ChangePasswordPage />} />
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />

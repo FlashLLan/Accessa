@@ -1,10 +1,14 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 import { getMe } from "../api/users";
+import { setLastWorkspaceSlug } from "../utils/storage";
 
 export const AuthContext = createContext(null);
 
 function normalizeUser(rawUser) {
   if (!rawUser) return null;
+
+  // Remember the workspace so logout and "/" can return to its login page.
+  setLastWorkspaceSlug(rawUser.workspace?.slug);
 
   return {
     ...rawUser,
