@@ -6,7 +6,6 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from backend.core.limiter import limiter
 
-from database.db import Base, engine
 import backend.models  # noqa: F401
 from backend.api import users
 from backend.api import auth
@@ -17,7 +16,9 @@ from backend.api import git_context
 from backend.api import ai_review
 from backend.api import review_actions
 from fastapi.middleware.cors import CORSMiddleware
-Base.metadata.create_all(bind=engine)
+
+# The schema is managed only by Alembic migrations (alembic upgrade head),
+# never created implicitly at startup.
 
 app = FastAPI(title="Accessa API")
 app.state.limiter = limiter

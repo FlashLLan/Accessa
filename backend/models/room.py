@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship
 
-from database.db import Base
+from database.base import Base
 
 ROOM_PUBLIC_ID_LENGTH = 12
 

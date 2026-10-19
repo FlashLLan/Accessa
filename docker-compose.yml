@@ -1,0 +1,27 @@
+# Local PostgreSQL for Accessa.
+# Passwords are read from .env (see .env.example); compose refuses to start without them.
+# The init scripts run only when the volume is empty. To re-run them: docker compose down -v
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-accessa}
+      ACCESSA_OWNER_PASSWORD: ${ACCESSA_OWNER_PASSWORD:?set ACCESSA_OWNER_PASSWORD in .env}
+      ACCESSA_APP_PASSWORD: ${ACCESSA_APP_PASSWORD:?set ACCESSA_APP_PASSWORD in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - accessa_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  accessa_pgdata:

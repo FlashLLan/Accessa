@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
-from database.db import Base
+from database.base import Base
 from backend.models.enums import (
     EnvironmentType,
     RequestStatus,
