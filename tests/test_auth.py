@@ -34,7 +34,7 @@ def test_valid_login_returns_token(client, db, create_role):
     with patch("backend.api.auth.verify_password", side_effect=_fake_verify):
         response = client.post(
             "/auth/login",
-            json={"email": "validuser@test.com", "password": "TestPass1!"},
+            json={"workspace_slug": "default-test", "email": "validuser@test.com", "password": "TestPass1!"},
         )
 
     assert response.status_code == 200
@@ -50,7 +50,7 @@ def test_invalid_password_is_rejected(client, db, create_role):
     with patch("backend.api.auth.verify_password", side_effect=_fake_verify):
         response = client.post(
             "/auth/login",
-            json={"email": "knownuser@test.com", "password": "WrongPassword"},
+            json={"workspace_slug": "default-test", "email": "knownuser@test.com", "password": "WrongPassword"},
         )
 
     assert response.status_code == 401
@@ -60,7 +60,7 @@ def test_invalid_password_is_rejected(client, db, create_role):
 def test_unknown_email_is_rejected(client, db):
     response = client.post(
         "/auth/login",
-        json={"email": "nobody@test.com", "password": "AnyPassword"},
+        json={"workspace_slug": "default-test", "email": "nobody@test.com", "password": "AnyPassword"},
     )
 
     assert response.status_code == 401
@@ -74,7 +74,7 @@ def test_valid_admin_login_returns_token(client, db, create_role):
     with patch("backend.api.auth.verify_password", side_effect=_fake_verify):
         response = client.post(
             "/auth/login",
-            json={"email": "adminuser@test.com", "password": "AdminPass1!"},
+            json={"workspace_slug": "default-test", "email": "adminuser@test.com", "password": "AdminPass1!"},
         )
 
     assert response.status_code == 200
@@ -90,7 +90,7 @@ def test_valid_lead_login_returns_token(client, db, create_role):
     with patch("backend.api.auth.verify_password", side_effect=_fake_verify):
         response = client.post(
             "/auth/login",
-            json={"email": "leaduser@test.com", "password": "LeadPass1!"},
+            json={"workspace_slug": "default-test", "email": "leaduser@test.com", "password": "LeadPass1!"},
         )
 
     assert response.status_code == 200
@@ -108,11 +108,13 @@ def test_inactive_user_login_is_rejected(client, db, create_role):
     with patch("backend.api.auth.verify_password", side_effect=_fake_verify):
         response = client.post(
             "/auth/login",
-            json={"email": "inactiveuser@test.com", "password": "TestPass1!"},
+            json={"workspace_slug": "default-test", "email": "inactiveuser@test.com", "password": "TestPass1!"},
         )
 
+    # Deliberate change: an inactive account gets the same generic 401 as any other
+    # failure, so the login endpoint does not reveal which accounts exist or are disabled.
     assert response.status_code == 401
-    assert response.json()["detail"] == "Account is inactive"
+    assert response.json()["detail"] == "Invalid credentials"
 
 
 def test_protected_endpoint_without_token_is_rejected(client, db):

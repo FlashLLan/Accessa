@@ -6,7 +6,7 @@ from backend.models.user import User
 
 def log_action(
     db: Session,
-    user_id: int,
+    user_id: int | None,
     action: str,
     entity_type: str,
     entity_id: int,
@@ -20,7 +20,10 @@ def log_action(
     workspace_id: int | None = None,
 ):
     # Every audit entry belongs to the actor's workspace so one workspace can never read another's trail.
+    # user_id may be None (failed login for an unknown email); workspace_id must then be given.
     if workspace_id is None:
+        if user_id is None:
+            raise ValueError("log_action needs workspace_id when user_id is None")
         workspace_id = db.get(User, user_id).workspace_id
 
     log_entry = AuditLog(

@@ -155,6 +155,7 @@ def change_my_password(
         raise HTTPException(status_code=400, detail="New password must be different from the current password.")
 
     current_user.hashed_password = hash_password(payload.new_password)
+    current_user.must_change_password = False
     current_user.updated_at = utc_now()
     db.commit()
 
@@ -314,12 +315,21 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """The only way to add a user to an existing workspace.
+
+    The new user always lands in the admin's own workspace (taken from the token;
+    UserCreate has no workspace field, so anything the client sends is ignored)
+    and must change the initial password on first login.
+    """
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can create users")
+
     if len(user_data.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
 
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    existing_user = workspace_users(db, current_user).filter(User.email == user_data.email).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Email already registered in this workspace")
 
     existing_name = workspace_users(db, current_user).filter(
         func.lower(User.full_name) == user_data.full_name.strip().lower()
@@ -347,6 +357,7 @@ def create_user(
         role_id=user_data.role_id,
         workspace_id=current_user.workspace_id,
         created_by=current_user.id,
+        must_change_password=True,
         is_active=True
     )
 

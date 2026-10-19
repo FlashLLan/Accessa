@@ -29,6 +29,7 @@ class UserResponse(BaseModel):
 
 class UserMeResponse(UserResponse):
     workspace: WorkspaceResponse
+    must_change_password: bool
 
 
 class UserShortResponse(BaseModel):

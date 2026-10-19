@@ -78,12 +78,11 @@ def test_signup_creates_workspace_and_sysadmin(client, db, roles):
     assert {"WORKSPACE_CREATED", "USER_CREATED"} <= actions
 
 
-def test_signup_rejects_existing_email(client, db, roles, create_user):
-    existing = create_user(db, role=roles["junior"], label="taken")
+def test_signup_rejects_taken_slug(client, db, roles):
     with patch("backend.api.auth.hash_password", side_effect=_fake_hash):
-        response = client.post("/auth/signup", json={**SIGNUP, "email": existing.email})
+        response = client.post("/auth/signup", json={**SIGNUP, "workspace_slug": "default-test"})
 
-    assert response.status_code == 400
+    assert response.status_code == 409
     assert db.query(Workspace).count() == 1
 
 
@@ -104,13 +103,13 @@ def test_old_self_register_endpoint_is_gone(client, db, roles):
 # --- token binding -------------------------------------------------------
 
 def test_token_without_workspace_claim_is_rejected(client, two_workspaces):
-    token = create_access_token({"sub": str(two_workspaces["admin_a"].id)})
+    token = create_access_token({"sub": str(two_workspaces["admin_a"].id)})  # no workspace_id claim
     response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
 def test_token_with_wrong_workspace_claim_is_rejected(client, two_workspaces):
-    token = create_access_token({"sub": str(two_workspaces["admin_a"].id), "workspace": str(two_workspaces["workspace_b"].public_id)})
+    token = create_access_token({"sub": str(two_workspaces["admin_a"].id), "workspace_id": two_workspaces["workspace_b"].id})
     response = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 

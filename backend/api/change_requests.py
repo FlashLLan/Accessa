@@ -21,9 +21,11 @@ from backend.models.comment import Comment
 from backend.schemas.comment import CommentCreate, CommentResponse
 router = APIRouter(prefix="/change-requests", tags=["Change Requests"])
 
-def _get_active_admin_count(db: Session, current_user: User) -> int:
+def _get_active_admin_count(db: Session, workspace_id: int) -> int:
+    """Active admins in one workspace; the two-admin rule never counts other workspaces."""
     return (
-        workspace_users(db, current_user)
+        db.query(User)
+        .filter(User.workspace_id == workspace_id)
         .join(User.role)
         .filter(User.is_active == True, Role.name == "admin")
         .count()
@@ -156,7 +158,7 @@ def approve_change_request(
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
-        active_admin_count = _get_active_admin_count(db, current_user)
+        active_admin_count = _get_active_admin_count(db, change_request.workspace_id)
 
     allowed, reason = can_user_decide_request(current_user, change_request, active_admin_count)
 
@@ -216,7 +218,7 @@ def reject_change_request(
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
-        active_admin_count = _get_active_admin_count(db, current_user)
+        active_admin_count = _get_active_admin_count(db, change_request.workspace_id)
 
     allowed, reason = can_user_decide_request(current_user, change_request, active_admin_count)
 

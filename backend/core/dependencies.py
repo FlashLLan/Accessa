@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
@@ -10,35 +10,56 @@ from backend.core.security import SECRET_KEY, ALGORITHM
 
 security = HTTPBearer()
 
+# Error code returned (403) while the account still has an initial password set by
+# an admin. The frontend detects it and redirects to the change-password page.
+PASSWORD_CHANGE_REQUIRED = "password_change_required"
+
+# The only routes reachable before that change: read my profile, change my password.
+_ALLOWED_BEFORE_PASSWORD_CHANGE = {
+    ("GET", "/users/me"),
+    ("PUT", "/users/me/password"),
+}
+
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
+    invalid_token = HTTPException(status_code=401, detail="Invalid token")
     token = credentials.credentials
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        token_workspace = payload.get("workspace")
+        user_id = int(payload["sub"])
+        token_workspace_id = payload["workspace_id"]
+    except (JWTError, KeyError, TypeError, ValueError):
+        raise invalid_token
 
-        if user_id is None or token_workspace is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
     # The token is bound to the workspace it was issued for.
-    if user.workspace is None or str(user.workspace.public_id) != token_workspace:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    if not isinstance(token_workspace_id, int) or user.workspace_id != token_workspace_id:
+        raise invalid_token
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Inactive user")
+
+    # Role and flags are read from the database on every request, so changes made
+    # by an admin take effect immediately, not when the token expires.
+    if user.must_change_password:
+        route = request.scope.get("route")
+        if (request.method, getattr(route, "path", None)) not in _ALLOWED_BEFORE_PASSWORD_CHANGE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": PASSWORD_CHANGE_REQUIRED,
+                    "message": "You must change your password before continuing.",
+                },
+            )
 
     return user
 
