@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.user import User
 from backend.models.change_request import ChangeRequest
+from backend.models.audit_log import AuditLog
 from backend.models.workspace import Workspace
 from backend.core.security import SECRET_KEY, ALGORITHM
 
@@ -68,25 +69,56 @@ def get_current_user(
     return user
 
 
-# --- Tenant scoping ------------------------------------------------------
-# Every query for tenant-owned data must start from one of these helpers.
-# The workspace always comes from the authenticated user, never from client input.
-# Rows that belong to another workspace are simply invisible (callers return 404,
-# not 403), so their existence is never revealed.
+# --- Workspace scoping ---------------------------------------------------
+# The single place where tenant isolation is applied to queries.
+#
+# - get_current_workspace_id is the dependency every endpoint uses to learn which
+#   workspace it is confined to. It always comes from the authenticated user,
+#   never from the request body, path or query string.
+# - scoped() is the only way to query a workspace-owned table. Child tables
+#   (approvals, comments, review_actions, git_context, ai_review_results) have no
+#   workspace_id; they are reached only through a change request loaded with
+#   get_request_or_404().
+# - Rows from another workspace are invisible: lookups return 404, never 403, so
+#   a user cannot even learn that they exist.
 
-def workspace_users(db: Session, current_user: User):
-    return db.query(User).filter(User.workspace_id == current_user.workspace_id)
+TENANT_MODELS = (User, ChangeRequest, AuditLog)
 
 
-def workspace_requests(db: Session, current_user: User):
-    return db.query(ChangeRequest).filter(ChangeRequest.workspace_id == current_user.workspace_id)
+def get_current_workspace_id(current_user: User = Depends(get_current_user)) -> int:
+    return current_user.workspace_id
 
 
-def get_workspace_request_or_404(db: Session, request_id: int, current_user: User) -> ChangeRequest:
-    cr = workspace_requests(db, current_user).filter(ChangeRequest.id == request_id).first()
+def scoped(db: Session, model, workspace_id: int):
+    if model not in TENANT_MODELS:
+        raise TypeError(
+            f"{model.__name__} has no workspace_id; load it through its change request instead"
+        )
+    return db.query(model).filter(model.workspace_id == workspace_id)
+
+
+def get_request_or_404(db: Session, workspace_id: int, request_id: int) -> ChangeRequest:
+    cr = scoped(db, ChangeRequest, workspace_id).filter(ChangeRequest.id == request_id).first()
     if not cr:
         raise HTTPException(status_code=404, detail="Change request not found")
     return cr
+
+
+def get_user_or_404(
+    db: Session,
+    workspace_id: int,
+    user_id: int,
+    *,
+    active_only: bool = False,
+    detail: str = "User not found",
+) -> User:
+    query = scoped(db, User, workspace_id).filter(User.id == user_id)
+    if active_only:
+        query = query.filter(User.is_active == True)  # noqa: E712
+    user = query.first()
+    if not user:
+        raise HTTPException(status_code=404, detail=detail)
+    return user
 
 
 # Only the system administrator may create user accounts. Non-admin roles have no creation rights.

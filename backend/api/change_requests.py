@@ -14,7 +14,13 @@ from backend.schemas.change_request import (
     ApprovalAction,
     ApprovalHistoryResponse,
 )
-from backend.core.dependencies import get_current_user, workspace_users, workspace_requests, get_workspace_request_or_404
+from backend.core.dependencies import (
+    get_current_user,
+    get_current_workspace_id,
+    scoped,
+    get_request_or_404,
+    get_user_or_404,
+)
 from backend.services.audit_service import log_action
 from backend.services.approval_service import can_user_decide_request
 from backend.models.comment import Comment
@@ -24,8 +30,7 @@ router = APIRouter(prefix="/change-requests", tags=["Change Requests"])
 def _get_active_admin_count(db: Session, workspace_id: int) -> int:
     """Active admins in one workspace; the two-admin rule never counts other workspaces."""
     return (
-        db.query(User)
-        .filter(User.workspace_id == workspace_id)
+        scoped(db, User, workspace_id)
         .join(User.role)
         .filter(User.is_active == True, Role.name == "admin")
         .count()
@@ -45,11 +50,10 @@ def validate_reviewer_for_request(reviewer: User, risk_level: RiskLevel, request
 def create_change_request(
     request_data: ChangeRequestCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    reviewer = workspace_users(db, current_user).filter(User.id == request_data.assigned_reviewer_id).first()
-    if not reviewer:
-        raise HTTPException(status_code=400, detail="Assigned reviewer not found")
+    reviewer = get_user_or_404(db, workspace_id, request_data.assigned_reviewer_id, detail="Assigned reviewer not found")
 
     if reviewer.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot assign yourself as reviewer")
@@ -64,7 +68,7 @@ def create_change_request(
         environment=request_data.environment,
         risk_level=request_data.risk_level,
         status=RequestStatus.DRAFT,
-        workspace_id=current_user.workspace_id,
+        workspace_id=workspace_id,
         created_by=current_user.id,
         assigned_reviewer_id=request_data.assigned_reviewer_id
     )
@@ -116,12 +120,13 @@ def create_change_request(
 @router.get("/", response_model=list[ChangeRequestResponse])
 def list_change_requests(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     if current_user.role.name == "admin":
-        return workspace_requests(db, current_user).order_by(ChangeRequest.created_at.desc()).all()
+        return scoped(db, ChangeRequest, workspace_id).order_by(ChangeRequest.created_at.desc()).all()
 
-    return workspace_requests(db, current_user).filter(
+    return scoped(db, ChangeRequest, workspace_id).filter(
         (ChangeRequest.created_by == current_user.id) |
         (ChangeRequest.assigned_reviewer_id == current_user.id) |
         (ChangeRequest.current_reviewer_id == current_user.id)
@@ -132,9 +137,10 @@ def list_change_requests(
 def get_change_request(
     request_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     if current_user.role.name != "admin":
         if (
@@ -152,9 +158,10 @@ def approve_change_request(
     request_id: int,
     action: ApprovalAction,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
@@ -212,9 +219,10 @@ def reject_change_request(
     request_id: int,
     action: ApprovalAction,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
@@ -271,9 +279,10 @@ def reject_change_request(
 def get_request_approvals(
     request_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     if current_user.role.name != "admin":
         if (
@@ -296,9 +305,10 @@ def update_change_request(
     request_id: int,
     request_data: ChangeRequestUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     if change_request.created_by != current_user.id and current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only the creator or admin can edit this request")
@@ -310,9 +320,7 @@ def update_change_request(
         )
 
     if request_data.assigned_reviewer_id is not None:
-        reviewer = workspace_users(db, current_user).filter(User.id == request_data.assigned_reviewer_id).first()
-        if not reviewer:
-            raise HTTPException(status_code=400, detail="Assigned reviewer not found")
+        reviewer = get_user_or_404(db, workspace_id, request_data.assigned_reviewer_id, detail="Assigned reviewer not found")
         if reviewer.id == current_user.id:
             raise HTTPException(status_code=400, detail="You cannot assign yourself as reviewer")
 
@@ -356,9 +364,10 @@ def update_change_request(
 def submit_change_request(
     request_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     if change_request.created_by != current_user.id and current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only the creator or admin can submit this request")
@@ -390,9 +399,10 @@ def submit_change_request(
 def list_request_comments(
     request_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     if current_user.role.name != "admin":
         if (
@@ -415,9 +425,10 @@ def add_comment_to_request(
     request_id: int,
     comment_data: CommentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     if current_user.role.name != "admin":
         if (
@@ -455,9 +466,10 @@ def add_comment_to_request(
 def apply_change_request(
     request_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    change_request = get_workspace_request_or_404(db, request_id, current_user)
+    change_request = get_request_or_404(db, workspace_id, request_id)
 
     if current_user.role.name != "admin" and change_request.created_by != current_user.id:
         raise HTTPException(

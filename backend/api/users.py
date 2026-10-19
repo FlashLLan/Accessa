@@ -4,7 +4,13 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.user import User
 from backend.models.role import Role
-from backend.core.dependencies import get_current_user, can_create_role, workspace_users
+from backend.core.dependencies import (
+    get_current_user,
+    get_current_workspace_id,
+    can_create_role,
+    scoped,
+    get_user_or_404,
+)
 from backend.core.security import hash_password, verify_password
 from backend.services.audit_service import log_action
 from backend.core.timeutils import utc_now
@@ -30,18 +36,29 @@ from backend.schemas.user import (
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
+def _count_through_requests(db: Session, workspace_id: int, child):
+    """Count child-table rows (comments, approvals, review actions) reached only
+    through change requests of the given workspace."""
+    return (
+        scoped(db, ChangeRequest, workspace_id)
+        .join(child, child.change_request_id == ChangeRequest.id)
+        .with_entities(func.count(child.id))
+    )
+
+
 @router.get("/", response_model=list[UserResponse])
 def list_users(
     search: str | None = Query(None),
     role: str | None = Query(None),
     status: str | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view all users")
 
-    query = workspace_users(db, current_user).join(Role)
+    query = scoped(db, User, workspace_id).join(Role)
 
     if search:
         term = f"%{search.lower()}%"
@@ -71,7 +88,8 @@ def list_reviewers(
     requester_role: str | None = Query(None),
     risk_level: str | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     from backend.services.approval_service import get_allowed_approver_roles
 
@@ -84,7 +102,7 @@ def list_reviewers(
         role_filter = Role.name.in_(["mid", "senior", "lead"])
 
     reviewers = (
-        workspace_users(db, current_user)
+        scoped(db, User, workspace_id)
         .join(Role)
         .filter(
             User.is_active == True,
@@ -102,12 +120,13 @@ def update_me(
     payload: UserUpdateMe,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     full_name = payload.full_name.strip()
     if not full_name:
         raise HTTPException(status_code=400, detail="Full name cannot be empty.")
 
-    existing = workspace_users(db, current_user).filter(
+    existing = scoped(db, User, workspace_id).filter(
         func.lower(User.full_name) == full_name.lower(),
         User.id != current_user.id,
     ).first()
@@ -177,17 +196,18 @@ def change_my_password(
 def get_my_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     uid = current_user.id
 
     requests_created = (
-        db.query(func.count(ChangeRequest.id))
+        scoped(db, ChangeRequest, workspace_id).with_entities(func.count(ChangeRequest.id))
         .filter(ChangeRequest.created_by == uid)
         .scalar() or 0
     )
 
     pending_requests = (
-        db.query(func.count(ChangeRequest.id))
+        scoped(db, ChangeRequest, workspace_id).with_entities(func.count(ChangeRequest.id))
         .filter(
             ChangeRequest.created_by == uid,
             ChangeRequest.status.in_([
@@ -200,49 +220,49 @@ def get_my_stats(
     )
 
     approved_requests = (
-        db.query(func.count(ChangeRequest.id))
+        scoped(db, ChangeRequest, workspace_id).with_entities(func.count(ChangeRequest.id))
         .filter(ChangeRequest.created_by == uid, ChangeRequest.status == RequestStatus.APPROVED)
         .scalar() or 0
     )
 
     rejected_requests = (
-        db.query(func.count(ChangeRequest.id))
+        scoped(db, ChangeRequest, workspace_id).with_entities(func.count(ChangeRequest.id))
         .filter(ChangeRequest.created_by == uid, ChangeRequest.status == RequestStatus.REJECTED)
         .scalar() or 0
     )
 
     comments_written = (
-        db.query(func.count(Comment.id))
+        _count_through_requests(db, workspace_id, Comment)
         .filter(Comment.user_id == uid)
         .scalar() or 0
     )
 
     requests_reviewed = (
-        db.query(func.count(Approval.id))
+        _count_through_requests(db, workspace_id, Approval)
         .filter(Approval.reviewer_id == uid)
         .scalar() or 0
     )
 
     approved_decisions = (
-        db.query(func.count(Approval.id))
+        _count_through_requests(db, workspace_id, Approval)
         .filter(Approval.reviewer_id == uid, Approval.decision == ApprovalDecision.APPROVED)
         .scalar() or 0
     )
 
     rejected_decisions = (
-        db.query(func.count(Approval.id))
+        _count_through_requests(db, workspace_id, Approval)
         .filter(Approval.reviewer_id == uid, Approval.decision == ApprovalDecision.REJECTED)
         .scalar() or 0
     )
 
     delegations_performed = (
-        db.query(func.count(ReviewAction.id))
+        _count_through_requests(db, workspace_id, ReviewAction)
         .filter(ReviewAction.actor_id == uid, ReviewAction.action_type == ReviewActionType.DELEGATE)
         .scalar() or 0
     )
 
     escalations_performed = (
-        db.query(func.count(ReviewAction.id))
+        _count_through_requests(db, workspace_id, ReviewAction)
         .filter(ReviewAction.actor_id == uid, ReviewAction.action_type == ReviewActionType.ESCALATE)
         .scalar() or 0
     )
@@ -254,22 +274,22 @@ def get_my_stats(
 
     if current_user.role.name == "admin":
         users_created = (
-            db.query(func.count(User.id))
+            scoped(db, User, workspace_id).with_entities(func.count(User.id))
             .filter(User.created_by == uid)
             .scalar() or 0
         )
         users_deactivated = (
-            db.query(func.count(AuditLog.id))
+            scoped(db, AuditLog, workspace_id).with_entities(func.count(AuditLog.id))
             .filter(AuditLog.user_id == uid, AuditLog.action == "deactivate_user")
             .scalar() or 0
         )
         role_changes_performed = (
-            db.query(func.count(AuditLog.id))
+            scoped(db, AuditLog, workspace_id).with_entities(func.count(AuditLog.id))
             .filter(AuditLog.user_id == uid, AuditLog.action == "update_user_role")
             .scalar() or 0
         )
         admin_actions_logged = (
-            db.query(func.count(AuditLog.id))
+            scoped(db, AuditLog, workspace_id).with_entities(func.count(AuditLog.id))
             .filter(AuditLog.user_id == uid)
             .scalar() or 0
         )
@@ -296,12 +316,10 @@ def get_my_stats(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
-    user = workspace_users(db, current_user).filter(User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = get_user_or_404(db, workspace_id, user_id)
 
     if current_user.role.name != "admin" and current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -313,7 +331,8 @@ def get_user(
 def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     """The only way to add a user to an existing workspace.
 
@@ -327,11 +346,11 @@ def create_user(
     if len(user_data.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
 
-    existing_user = workspace_users(db, current_user).filter(User.email == user_data.email).first()
+    existing_user = scoped(db, User, workspace_id).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered in this workspace")
 
-    existing_name = workspace_users(db, current_user).filter(
+    existing_name = scoped(db, User, workspace_id).filter(
         func.lower(User.full_name) == user_data.full_name.strip().lower()
     ).first()
     if existing_name:
@@ -355,7 +374,7 @@ def create_user(
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
         role_id=user_data.role_id,
-        workspace_id=current_user.workspace_id,
+        workspace_id=workspace_id,
         created_by=current_user.id,
         must_change_password=True,
         is_active=True
@@ -391,14 +410,13 @@ def create_user(
 def deactivate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can deactivate users")
 
-    user = workspace_users(db, current_user).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = get_user_or_404(db, workspace_id, user_id)
 
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
@@ -429,14 +447,13 @@ def deactivate_user(
 def reactivate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can reactivate users")
 
-    user = workspace_users(db, current_user).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = get_user_or_404(db, workspace_id, user_id)
 
     if user.is_active:
         raise HTTPException(status_code=400, detail="User is already active")
@@ -463,14 +480,13 @@ def update_user_role(
     user_id: int,
     payload: UserRoleUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can change user roles")
 
-    user = workspace_users(db, current_user).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = get_user_or_404(db, workspace_id, user_id)
 
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot change your own role")
@@ -505,23 +521,22 @@ def update_user_role(
 def get_user_details(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view user details")
 
-    user = workspace_users(db, current_user).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = get_user_or_404(db, workspace_id, user_id)
 
     total_requests_created = (
-        db.query(func.count(ChangeRequest.id))
+        scoped(db, ChangeRequest, workspace_id).with_entities(func.count(ChangeRequest.id))
         .filter(ChangeRequest.created_by == user.id)
         .scalar()
     )
 
     total_requests_approved = (
-        db.query(func.count(Approval.id))
+        _count_through_requests(db, workspace_id, Approval)
         .filter(
             Approval.reviewer_id == user.id,
             Approval.decision == ApprovalDecision.APPROVED
@@ -530,7 +545,7 @@ def get_user_details(
     )
 
     total_requests_rejected = (
-        db.query(func.count(Approval.id))
+        _count_through_requests(db, workspace_id, Approval)
         .filter(
             Approval.reviewer_id == user.id,
             Approval.decision == ApprovalDecision.REJECTED

@@ -271,17 +271,25 @@ def test_admin_cannot_reach_request_of_another_workspace(
 
 def test_cannot_assign_reviewer_from_another_workspace(client, two_workspaces, login_user):
     login_user(two_workspaces["junior_a"])
-    response = client.post("/change-requests/", json={
-        "title": "Cross-workspace",
-        "description": "Should fail",
-        "request_type": "access_change",
-        "target_system": "srv",
-        "environment": "development",
-        "risk_level": RiskLevel.LOW.value,
-        "assigned_reviewer_id": two_workspaces["mid_b"].id,
-    })
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Assigned reviewer not found"
+
+    def create_with_reviewer(reviewer_id):
+        return client.post("/change-requests/", json={
+            "title": "Cross-workspace",
+            "description": "Should fail",
+            "request_type": "access_change",
+            "target_system": "srv",
+            "environment": "development",
+            "risk_level": RiskLevel.LOW.value,
+            "assigned_reviewer_id": reviewer_id,
+        })
+
+    other_workspace = create_with_reviewer(two_workspaces["mid_b"].id)
+    nonexistent = create_with_reviewer(999_999)
+
+    assert other_workspace.status_code == 404
+    assert other_workspace.json() == {"detail": "Assigned reviewer not found"}
+    # Indistinguishable from an id that does not exist at all.
+    assert (other_workspace.status_code, other_workspace.json()) == (nonexistent.status_code, nonexistent.json())
 
 
 def test_cannot_delegate_to_user_in_another_workspace(
