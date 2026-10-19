@@ -1,3 +1,5 @@
+import pytest
+
 from backend.models.audit_log import AuditLog
 from backend.models.enums import RequestStatus
 
@@ -206,3 +208,26 @@ def test_update_to_high_risk_fails_with_ineligible_reviewer(client, db, create_u
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Assigned reviewer is not eligible to review this type of request."
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_current_reviewer_can_access_ai_review(
+    client, db, create_user, create_role, login_user, seed_change_request, method
+):
+    # After escalation/delegation the current reviewer may differ from the assigned
+    # one; AI review must follow the same access rule as Git context and comments.
+    junior = create_role(db, "junior", level=1)
+    mid = create_role(db, "mid", level=2)
+    creator = create_user(db, role=junior, label="creator")
+    assigned = create_user(db, role=mid, label="assigned")
+    current = create_user(db, role=mid, label="current")
+    outsider = create_user(db, role=mid, label="outsider")
+
+    req = seed_change_request(db, creator_id=creator.id, reviewer_id=assigned.id)
+    req.current_reviewer_id = current.id
+    db.commit()
+
+    login_user(current)
+    assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 200
+
+    login_user(outsider)
+    assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 403

@@ -311,3 +311,19 @@ def test_regular_user_cannot_view_user_details(client, db, create_user, create_r
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Only admin can view user details"
+
+def test_reactivation_clears_deactivated_at(client, db, create_user, create_role, login_user):
+    admin_role = create_role(db, "admin", level=10)
+    user_role = create_role(db, "senior", level=5)
+    admin = create_user(db, role=admin_role, label="admin")
+    target_user = create_user(db, role=user_role, label="target")
+
+    login_user(admin)
+    assert client.patch(f"/users/{target_user.id}/deactivate").status_code == 200
+    db.refresh(target_user)
+    assert target_user.deactivated_at is not None
+
+    assert client.patch(f"/users/{target_user.id}/reactivate").status_code == 200
+    db.refresh(target_user)
+    assert target_user.is_active is True
+    assert target_user.deactivated_at is None

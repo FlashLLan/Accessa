@@ -459,6 +459,7 @@ def reactivate_user(
         raise HTTPException(status_code=400, detail="User is already active")
 
     user.is_active = True
+    user.deactivated_at = None
     db.commit()
     db.refresh(user)
 

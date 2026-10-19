@@ -1,25 +1,30 @@
 """Test setup: every test runs against a real PostgreSQL database.
 
-- TEST_DATABASE_URL (required) is the database the tests use, connected as the
-  application role (accessa_app), so the same grants apply as in production,
-  including the append-only audit_logs table.
-- At session start the test database is dropped and re-created by the schema
-  owner, and `alembic upgrade head` builds it: the tests exercise the real
-  migrations, constraints and grants, not Base.metadata.create_all().
-- Before each test every table is truncated (as the owner; the app role may not
-  TRUNCATE audit_logs) and identities restart, so the default workspace is id 1.
-- The owner connection is MIGRATION_DATABASE_URL with the database name swapped
-  for the test database's (override with TEST_MIGRATION_DATABASE_URL).
+- TEST_DATABASE_URL (required) decides *where* the tests run: host, port and
+  database. The app connects there as the application role (accessa_app), so the
+  same grants apply as in production, including the append-only audit_logs.
+- The schema-owner role is used to create, migrate and truncate the test
+  database. Only its username and password are taken from MIGRATION_DATABASE_URL
+  (or TEST_MIGRATION_DATABASE_URL); host, port and database always come from
+  TEST_DATABASE_URL. Creating/dropping the test database goes through the
+  server's built-in "postgres" database on that same host.
+- A connection guard on every SQLAlchemy engine (the app's, the tests', Alembic's)
+  refuses any connection that is not to that host/port/test database, so a test
+  run can never reach the development or production database.
+- At session start the test database is dropped, re-created and built with
+  `alembic upgrade head`; before each test all tables are truncated (as the owner;
+  the app role may not TRUNCATE audit_logs) and identities restart.
 """
 import os
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from itertools import count
 from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String, Text, create_engine, insert, text
-from sqlalchemy.engine import make_url
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String, Text, create_engine, event, insert, text
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import sessionmaker
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,20 +35,77 @@ if not TEST_DATABASE_URL:
     raise RuntimeError("TEST_DATABASE_URL is not set (see .env.example).")
 
 _test_url = make_url(TEST_DATABASE_URL)
-_owner_admin_url = make_url(os.environ["MIGRATION_DATABASE_URL"])
-_owner_test_url = make_url(os.getenv("TEST_MIGRATION_DATABASE_URL") or _owner_admin_url.set(database=_test_url.database))
+_owner_credentials_url = make_url(os.getenv("TEST_MIGRATION_DATABASE_URL") or os.environ["MIGRATION_DATABASE_URL"])
+# Location from TEST_DATABASE_URL only; credentials from the owner URL.
+_owner_test_url = _test_url.set(username=_owner_credentials_url.username, password=_owner_credentials_url.password)
+_maintenance_url = _owner_test_url.set(database="postgres")
+
+# The development database, remembered only so a test can prove it is unreachable.
+DEV_DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not _test_url.drivername.startswith("postgresql"):
     raise RuntimeError("TEST_DATABASE_URL must point at PostgreSQL.")
-# The test database is dropped and re-created: never let it be the dev/prod database.
-if _test_url.database == _owner_admin_url.database or "test" not in _test_url.database:
+# The test database is dropped and re-created: never let it be a real database.
+if "test" not in (_test_url.database or "") or (
+    DEV_DATABASE_URL and make_url(DEV_DATABASE_URL).database == _test_url.database
+):
     raise RuntimeError(
         f"Refusing to use '{_test_url.database}' as the test database; "
         "its name must contain 'test' and differ from the main database."
     )
 
-# The application must never see the development database during tests.
+# --- connection guard -------------------------------------------------------------
+_TEST_HOST = _test_url.host or "localhost"
+_TEST_PORT = _test_url.port or 5432
+_allowed_databases = {_test_url.database}
+
+
+class ForbiddenDatabaseConnection(RuntimeError):
+    pass
+
+
+def _check_target(host, port, dbname):
+    if host != _TEST_HOST or int(port or 5432) != _TEST_PORT or dbname not in _allowed_databases:
+        raise ForbiddenDatabaseConnection(
+            f"Tests may only connect to {_TEST_HOST}:{_TEST_PORT}/{_test_url.database}, "
+            f"not {host}:{port or 5432}/{dbname}"
+        )
+
+
+@event.listens_for(Engine, "do_connect")
+def _refuse_before_connecting(dialect, conn_rec, cargs, cparams):
+    # Runs before the network connection is opened: a forbidden target is never contacted.
+    _check_target(cparams.get("host"), cparams.get("port"), cparams.get("dbname"))
+
+
+@event.listens_for(Engine, "connect")
+def _verify_after_connecting(dbapi_connection, connection_record):
+    # Second check on what the driver actually connected to (e.g. PG* env defaults).
+    info = dbapi_connection.info
+    try:
+        _check_target(info.host, info.port, info.dbname)
+    except ForbiddenDatabaseConnection:
+        dbapi_connection.close()
+        raise
+
+
+@contextmanager
+def _maintenance_connection():
+    """Short-lived connection to the server's 'postgres' database, only to create
+    or drop the test database."""
+    _allowed_databases.add("postgres")
+    engine = create_engine(_maintenance_url.render_as_string(hide_password=False), isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            yield conn
+    finally:
+        engine.dispose()
+        _allowed_databases.discard("postgres")
+
+
+# The application and Alembic only ever see the test database.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ["MIGRATION_DATABASE_URL"] = _owner_test_url.render_as_string(hide_password=False)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -68,30 +130,28 @@ def _run_migrations():
     from alembic import command
     from alembic.config import Config
 
-    previous = os.environ.get("MIGRATION_DATABASE_URL")
-    os.environ["MIGRATION_DATABASE_URL"] = _owner_test_url.render_as_string(hide_password=False)
-    try:
-        command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
-    finally:
-        os.environ["MIGRATION_DATABASE_URL"] = previous
+    # alembic/env.py reads MIGRATION_DATABASE_URL, set above to the test database.
+    command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
 
 
 @pytest.fixture(scope="session", autouse=True)
 def test_database():
-    admin = create_engine(_owner_admin_url.render_as_string(hide_password=False), isolation_level="AUTOCOMMIT")
     name = _test_url.database
-    with admin.connect() as conn:
+    with _maintenance_connection() as conn:
         conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
         conn.execute(text(f'CREATE DATABASE "{name}"'))
 
     _run_migrations()
     yield
 
-    app_engine.dispose()
-    owner_engine.dispose()
-    with admin.connect() as conn:
+    # Close every pool (including the application's own engine) so no session of
+    # the app role is left that the owner would have to terminate.
+    from database.db import engine as application_engine
+
+    for engine in (app_engine, owner_engine, application_engine):
+        engine.dispose()
+    with _maintenance_connection() as conn:
         conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
-    admin.dispose()
 
 
 def _truncate_all_tables():
