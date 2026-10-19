@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from backend.models.user import User
+from backend.models.change_request import ChangeRequest
 from backend.core.security import SECRET_KEY, ALGORITHM
 
 security = HTTPBearer()
@@ -19,8 +20,9 @@ def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
+        token_room = payload.get("room")
 
-        if user_id is None:
+        if user_id is None or token_room is None:
             raise HTTPException(status_code=401, detail="Invalid token")
 
     except JWTError:
@@ -31,10 +33,35 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
+    # The token is bound to the room it was issued for.
+    if user.room is None or user.room.public_id != token_room:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Inactive user")
 
     return user
+
+
+# --- Tenant scoping ------------------------------------------------------
+# Every query for tenant-owned data must start from one of these helpers.
+# The room always comes from the authenticated user, never from client input.
+# Rows that belong to another room are simply invisible (callers return 404,
+# not 403), so their existence is never revealed.
+
+def room_users(db: Session, current_user: User):
+    return db.query(User).filter(User.room_id == current_user.room_id)
+
+
+def room_requests(db: Session, current_user: User):
+    return db.query(ChangeRequest).filter(ChangeRequest.room_id == current_user.room_id)
+
+
+def get_room_request_or_404(db: Session, request_id: int, current_user: User) -> ChangeRequest:
+    cr = room_requests(db, current_user).filter(ChangeRequest.id == request_id).first()
+    if not cr:
+        raise HTTPException(status_code=404, detail="Change request not found")
+    return cr
 
 
 # Only the system administrator may create user accounts. Non-admin roles have no creation rights.

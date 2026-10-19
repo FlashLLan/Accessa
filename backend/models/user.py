@@ -13,6 +13,7 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -21,6 +22,7 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=True)
 
     role = relationship("Role", back_populates="users")
+    room = relationship("Room", back_populates="users")
 
     created_requests = relationship(
         "ChangeRequest",

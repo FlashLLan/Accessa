@@ -23,6 +23,7 @@ class ChangeRequest(Base):
     environment = Column(Enum(EnvironmentType), nullable=False)
     risk_level = Column(Enum(RiskLevel), nullable=False)
     status = Column(Enum(RequestStatus), default=RequestStatus.DRAFT, nullable=False)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
 
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     assigned_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)

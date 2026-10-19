@@ -18,6 +18,7 @@ def _make_user_with_password(db, role, label, password="password123"):
         email=f"{label}@test.com",
         hashed_password=_fake_hash(password),
         role_id=role.id,
+        room_id=1,
         is_active=True,
     )
     db.add(user)

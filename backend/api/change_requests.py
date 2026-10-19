@@ -14,16 +14,16 @@ from backend.schemas.change_request import (
     ApprovalAction,
     ApprovalHistoryResponse,
 )
-from backend.core.dependencies import get_current_user
+from backend.core.dependencies import get_current_user, room_users, room_requests, get_room_request_or_404
 from backend.services.audit_service import log_action
 from backend.services.approval_service import can_user_decide_request
 from backend.models.comment import Comment
 from backend.schemas.comment import CommentCreate, CommentResponse
 router = APIRouter(prefix="/change-requests", tags=["Change Requests"])
 
-def _get_active_admin_count(db: Session) -> int:
+def _get_active_admin_count(db: Session, current_user: User) -> int:
     return (
-        db.query(User)
+        room_users(db, current_user)
         .join(User.role)
         .filter(User.is_active == True, Role.name == "admin")
         .count()
@@ -45,7 +45,7 @@ def create_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    reviewer = db.query(User).filter(User.id == request_data.assigned_reviewer_id).first()
+    reviewer = room_users(db, current_user).filter(User.id == request_data.assigned_reviewer_id).first()
     if not reviewer:
         raise HTTPException(status_code=400, detail="Assigned reviewer not found")
 
@@ -62,6 +62,7 @@ def create_change_request(
         environment=request_data.environment,
         risk_level=request_data.risk_level,
         status=RequestStatus.DRAFT,
+        room_id=current_user.room_id,
         created_by=current_user.id,
         assigned_reviewer_id=request_data.assigned_reviewer_id
     )
@@ -116,9 +117,9 @@ def list_change_requests(
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role.name == "admin":
-        return db.query(ChangeRequest).order_by(ChangeRequest.created_at.desc()).all()
+        return room_requests(db, current_user).order_by(ChangeRequest.created_at.desc()).all()
 
-    return db.query(ChangeRequest).filter(
+    return room_requests(db, current_user).filter(
         (ChangeRequest.created_by == current_user.id) |
         (ChangeRequest.assigned_reviewer_id == current_user.id) |
         (ChangeRequest.current_reviewer_id == current_user.id)
@@ -131,10 +132,7 @@ def get_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     if current_user.role.name != "admin":
         if (
@@ -154,14 +152,11 @@ def approve_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
-        active_admin_count = _get_active_admin_count(db)
+        active_admin_count = _get_active_admin_count(db, current_user)
 
     allowed, reason = can_user_decide_request(current_user, change_request, active_admin_count)
 
@@ -217,14 +212,11 @@ def reject_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
-        active_admin_count = _get_active_admin_count(db)
+        active_admin_count = _get_active_admin_count(db, current_user)
 
     allowed, reason = can_user_decide_request(current_user, change_request, active_admin_count)
 
@@ -279,10 +271,7 @@ def get_request_approvals(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     if current_user.role.name != "admin":
         if (
@@ -307,10 +296,7 @@ def update_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     if change_request.created_by != current_user.id and current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only the creator or admin can edit this request")
@@ -322,7 +308,7 @@ def update_change_request(
         )
 
     if request_data.assigned_reviewer_id is not None:
-        reviewer = db.query(User).filter(User.id == request_data.assigned_reviewer_id).first()
+        reviewer = room_users(db, current_user).filter(User.id == request_data.assigned_reviewer_id).first()
         if not reviewer:
             raise HTTPException(status_code=400, detail="Assigned reviewer not found")
         if reviewer.id == current_user.id:
@@ -370,10 +356,7 @@ def submit_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     if change_request.created_by != current_user.id and current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only the creator or admin can submit this request")
@@ -407,10 +390,7 @@ def list_request_comments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     if current_user.role.name != "admin":
         if (
@@ -435,10 +415,7 @@ def add_comment_to_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     if current_user.role.name != "admin":
         if (
@@ -478,10 +455,7 @@ def apply_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    change_request = db.query(ChangeRequest).filter(ChangeRequest.id == request_id).first()
-
-    if not change_request:
-        raise HTTPException(status_code=404, detail="Change request not found")
+    change_request = get_room_request_or_404(db, request_id, current_user)
 
     if current_user.role.name != "admin" and change_request.created_by != current_user.id:
         raise HTTPException(

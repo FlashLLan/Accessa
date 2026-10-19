@@ -23,6 +23,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(data: dict):
+    """`data` must contain `sub` (user id) and `room` (room public id)."""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})

@@ -11,6 +11,7 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
     action = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     entity_id = Column(Integer, nullable=False)

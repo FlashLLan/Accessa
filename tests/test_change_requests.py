@@ -189,6 +189,7 @@ def seed_change_request(
         status=status,
         created_by=creator_id,
         assigned_reviewer_id=reviewer_id,
+        room_id=1,
     )
     db.add(req)
     db.commit()

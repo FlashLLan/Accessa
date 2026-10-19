@@ -19,7 +19,12 @@ def list_audit_logs(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view audit logs")
 
-    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).all()
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.room_id == current_user.room_id)
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    )
 
     log_action(
         db=db,

@@ -90,6 +90,7 @@ def test_admin_can_view_audit_logs(client, db, create_user, create_role, login_u
 
     log = AuditLog(
         user_id=user.id,
+        room_id=user.room_id,
         action="create_change_request",
         entity_type="change_request",
         entity_id=1,

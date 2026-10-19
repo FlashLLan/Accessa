@@ -4,6 +4,7 @@ import RoleGuard from "./components/common/RoleGuard";
 import AppLayout from "./components/layout/AppLayout";
 
 import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 import DashboardPage from "./pages/DashboardPage";
 import RequestsPage from "./pages/RequestsPage";
 import RequestDetailsPage from "./pages/RequestDetailsPage";
@@ -19,6 +20,7 @@ function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>

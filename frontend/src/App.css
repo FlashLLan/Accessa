@@ -906,6 +906,18 @@
   font-family: inherit;
 }
 
+.auth-switch {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
+.auth-switch a {
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
 .auth-error,
 .success-banner {
   word-break: break-word;

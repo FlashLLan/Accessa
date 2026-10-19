@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { loginRequest } from "../api/auth";
 
@@ -48,7 +48,7 @@ export default function LoginPage() {
           <p className="auth-kicker">Accessa</p>
           <h1>Sign in</h1>
           <p className="auth-subtitle">
-            Use your account to access requests, reviews, and user management.
+            Log in with the account your room administrator created for you.
           </p>
         </div>
 
@@ -85,6 +85,10 @@ export default function LoginPage() {
             {isSubmitting ? "Signing in..." : "Login"}
           </button>
         </form>
+
+        <p className="auth-switch">
+          Setting up Accessa for a new team? <Link to="/signup">Sign up</Link>
+        </p>
 
         <div className="auth-help">
           <span>Test accounts:</span>

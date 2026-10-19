@@ -12,6 +12,7 @@ from backend.core.dependencies import get_current_user
 from backend.models.change_request import ChangeRequest
 from backend.models.user import User
 from backend.models.role import Role
+from backend.models.room import Room
 from backend.models.approval import Approval
 from backend.models.enums import RequestStatus, RequestType, EnvironmentType, RiskLevel
 from database.db import Base, get_db
@@ -33,6 +34,9 @@ def db():
     Base.metadata.create_all(bind=engine)
 
     session = TestingSessionLocal()
+    # Every test gets a default room (id=1); users without an explicit room land in it.
+    session.add(Room(id=1, public_id="100000000001", name="Default Test Room"))
+    session.commit()
     try:
         yield session
     finally:
@@ -137,12 +141,23 @@ def create_role():
 
 
 @pytest.fixture
+def create_room():
+    def _create_room(db, name, public_id):
+        room = Room(name=name, public_id=public_id)
+        db.add(room)
+        db.commit()
+        db.refresh(room)
+        return room
+    return _create_room
+
+
+@pytest.fixture
 def create_user():
-    def _create_user(db, *, role, label):
+    def _create_user(db, *, role, label, room=None):
         user = _insert_row(
             db,
             User,
-            overrides={"role_id": role.id},
+            overrides={"role_id": role.id, "room_id": room.id if room else 1},
             label=label,
         )
         db.refresh(user)
@@ -180,6 +195,7 @@ def seed_change_request():
             status=status,
             created_by=creator_id,
             assigned_reviewer_id=reviewer_id,
+            room_id=db.get(User, creator_id).room_id,
         )
         db.add(req)
         db.commit()

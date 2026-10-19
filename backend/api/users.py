@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.user import User
 from backend.models.role import Role
-from backend.core.dependencies import get_current_user, can_create_role
+from backend.core.dependencies import get_current_user, can_create_role, room_users
 from backend.core.security import hash_password, verify_password
 from backend.services.audit_service import log_action
 from sqlalchemy import func
@@ -25,6 +25,7 @@ from backend.schemas.user import (
     UserUpdateMe,
     PasswordChangeRequest,
     UserMeStatsResponse,
+    UserMeResponse,
 )
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -41,7 +42,7 @@ def list_users(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view all users")
 
-    query = db.query(User).join(Role)
+    query = room_users(db, current_user).join(Role)
 
     if search:
         term = f"%{search.lower()}%"
@@ -61,7 +62,7 @@ def list_users(
     return query.all()
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserMeResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
@@ -84,7 +85,7 @@ def list_reviewers(
         role_filter = Role.name.in_(["mid", "senior", "lead"])
 
     reviewers = (
-        db.query(User)
+        room_users(db, current_user)
         .join(Role)
         .filter(
             User.is_active == True,
@@ -107,7 +108,7 @@ def update_me(
     if not full_name:
         raise HTTPException(status_code=400, detail="Full name cannot be empty.")
 
-    existing = db.query(User).filter(
+    existing = room_users(db, current_user).filter(
         func.lower(User.full_name) == full_name.lower(),
         User.id != current_user.id,
     ).first()
@@ -297,7 +298,7 @@ def get_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = room_users(db, current_user).filter(User.id == user_id).first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -321,7 +322,7 @@ def create_user(
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    existing_name = db.query(User).filter(
+    existing_name = room_users(db, current_user).filter(
         func.lower(User.full_name) == user_data.full_name.strip().lower()
     ).first()
     if existing_name:
@@ -345,6 +346,8 @@ def create_user(
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
         role_id=user_data.role_id,
+        room_id=current_user.room_id,
+        created_by=current_user.id,
         is_active=True
     )
 
@@ -383,7 +386,7 @@ def deactivate_user(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can deactivate users")
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = room_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -421,7 +424,7 @@ def reactivate_user(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can reactivate users")
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = room_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -455,7 +458,7 @@ def update_user_role(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can change user roles")
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = room_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -497,7 +500,7 @@ def get_user_details(
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view user details")
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = room_users(db, current_user).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 

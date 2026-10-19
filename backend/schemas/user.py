@@ -3,6 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from backend.schemas.role import RoleResponse
+from backend.schemas.room import RoomResponse
 
 
 class UserCreate(BaseModel):
@@ -24,6 +25,10 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserMeResponse(UserResponse):
+    room: RoomResponse
 
 
 class UserShortResponse(BaseModel):
