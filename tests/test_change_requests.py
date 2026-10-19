@@ -2,10 +2,7 @@ from datetime import datetime, timezone
 from itertools import count
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String, Text, create_engine, insert
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String, Text, insert
 
 from backend.models.enums import RequestStatus
 from backend.main import app
@@ -21,45 +18,8 @@ from backend.models.enums import (
     RiskLevel,
     ApprovalDecision,
 )
-from database.db import Base, get_db
 
-# ---- test db setup ----
-
-TEST_DB_URL = "sqlite://"
-
-engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-@pytest.fixture(scope="function")
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-
-    session = TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-@pytest.fixture(scope="function")
-def client(db):
-    def override_get_db():
-        try:
-            yield db
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+# Database, client and cleanup come from conftest.py (PostgreSQL, app role).
 
 
 # ---- generic seed helpers ----
