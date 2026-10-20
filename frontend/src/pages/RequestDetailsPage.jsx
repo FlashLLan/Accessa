@@ -106,14 +106,8 @@ function GitContextCard({ git }) {
         )}
         {git.pull_request_url && (
           <div className="detail-box">
-            <span className="detail-label">Pull request</span>
-            <SafeLink url={git.pull_request_url} label="View PR" />
-          </div>
-        )}
-        {git.merge_request_url && (
-          <div className="detail-box">
-            <span className="detail-label">Merge request</span>
-            <SafeLink url={git.merge_request_url} label="View MR" />
+            <span className="detail-label">Pull/merge request</span>
+            <SafeLink url={git.pull_request_url} label="View pull/merge request" />
           </div>
         )}
       </div>

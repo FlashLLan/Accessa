@@ -210,11 +210,7 @@ def get_my_stats(
         scoped(db, ChangeRequest, workspace_id).with_entities(func.count(ChangeRequest.id))
         .filter(
             ChangeRequest.created_by == uid,
-            ChangeRequest.status.in_([
-                RequestStatus.PENDING_REVIEW,
-                RequestStatus.ESCALATED,
-                RequestStatus.DELEGATED,
-            ]),
+            ChangeRequest.status == RequestStatus.PENDING_REVIEW,
         )
         .scalar() or 0
     )

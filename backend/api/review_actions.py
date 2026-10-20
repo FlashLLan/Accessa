@@ -19,7 +19,6 @@ from backend.services.audit_service import log_action
 
 router = APIRouter(prefix="/change-requests", tags=["Review Actions"])
 
-ROLE_HIERARCHY = {"junior": 0, "mid": 1, "senior": 2, "lead": 3, "admin": 4}
 
 
 class ReviewTransferPayload(BaseModel):
@@ -119,8 +118,10 @@ def escalate_request(
             detail="Cannot escalate to a reviewer who has already handled this request",
         )
 
-    current_level = ROLE_HIERARCHY.get(current_user.role.name, -1)
-    target_level = ROLE_HIERARCHY.get(target.role.name, -1)
+    # Seniority comes from the roles table (roles.level), the same data the
+    # approval policy is built on, not from a list duplicated in code.
+    current_level = current_user.role.level
+    target_level = target.role.level
     if target_level <= current_level:
         raise HTTPException(
             status_code=400,
@@ -129,7 +130,6 @@ def escalate_request(
 
     _assert_matrix_eligible(target, cr)
 
-    from_status = cr.status.value
     cr.assigned_reviewer_id = target.id
     cr.current_reviewer_id = target.id
 
@@ -138,8 +138,6 @@ def escalate_request(
         actor_id=current_user.id,
         action_type=ReviewActionType.ESCALATE,
         target_reviewer_id=target.id,
-        from_status=from_status,
-        to_status=from_status,
         comment=payload.comment,
     )
     db.add(action)
@@ -181,8 +179,10 @@ def delegate_request(
     if target.id == cr.created_by:
         raise HTTPException(status_code=400, detail="Cannot delegate to the request creator")
 
-    current_level = ROLE_HIERARCHY.get(current_user.role.name, -1)
-    target_level = ROLE_HIERARCHY.get(target.role.name, -1)
+    # Seniority comes from the roles table (roles.level), the same data the
+    # approval policy is built on, not from a list duplicated in code.
+    current_level = current_user.role.level
+    target_level = target.role.level
     if target_level < current_level:
         raise HTTPException(
             status_code=400,
@@ -206,7 +206,6 @@ def delegate_request(
             detail="Cannot delegate to a reviewer who has already handled this request",
         )
 
-    from_status = cr.status.value
     cr.assigned_reviewer_id = target.id
     cr.current_reviewer_id = target.id
     cr.status = RequestStatus.PENDING_REVIEW
@@ -216,8 +215,6 @@ def delegate_request(
         actor_id=current_user.id,
         action_type=ReviewActionType.DELEGATE,
         target_reviewer_id=target.id,
-        from_status=from_status,
-        to_status=RequestStatus.PENDING_REVIEW.value,
         comment=payload.comment,
     )
     db.add(action)

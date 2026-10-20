@@ -184,6 +184,12 @@ def app_db_engine():
     return app_engine
 
 
+@pytest.fixture
+def owner_db_engine():
+    """Engine connected as the schema owner of the test database (migration tests)."""
+    return owner_engine
+
+
 @pytest.fixture(scope="function")
 def client(db):
     def override_get_db():

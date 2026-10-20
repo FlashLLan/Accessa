@@ -18,13 +18,6 @@ export function getStatusBadgeClass(status) {
       return "status-badge status-rejected";
     case "applied":
       return "status-badge status-approved";
-    case "escalated":
-      return "status-badge status-escalated";
-    case "delegated":
-      return "status-badge status-delegated";
-    case "cancelled":
-    case "closed":
-      return "status-badge status-draft";
     default:
       return "status-badge";
   }

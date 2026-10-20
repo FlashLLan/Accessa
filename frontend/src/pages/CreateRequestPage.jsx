@@ -24,7 +24,6 @@ const initialGitForm = {
   target_branch: "",
   commit_hash: "",
   pull_request_url: "",
-  merge_request_url: "",
   changed_files_summary: "",
   diff_text: "",
 };
@@ -338,30 +337,16 @@ export default function CreateRequestPage() {
                 />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="gc_pull_request_url">Pull request URL</label>
-                  <input
-                    id="gc_pull_request_url"
-                    name="pull_request_url"
-                    type="url"
-                    value={gitForm.pull_request_url}
-                    onChange={handleGitChange}
-                    placeholder="https://github.com/org/repo/pull/42"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="gc_merge_request_url">Merge request URL</label>
-                  <input
-                    id="gc_merge_request_url"
-                    name="merge_request_url"
-                    type="url"
-                    value={gitForm.merge_request_url}
-                    onChange={handleGitChange}
-                    placeholder="https://gitlab.com/org/repo/-/merge_requests/7"
-                  />
-                </div>
+              <div className="form-group">
+                <label htmlFor="gc_pull_request_url">Pull/merge request URL</label>
+                <input
+                  id="gc_pull_request_url"
+                  name="pull_request_url"
+                  type="url"
+                  value={gitForm.pull_request_url}
+                  onChange={handleGitChange}
+                  placeholder="https://github.com/org/repo/pull/42 or https://gitlab.com/org/repo/-/merge_requests/7"
+                />
               </div>
 
               <div className="form-group">

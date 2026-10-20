@@ -12,6 +12,8 @@ What it does, in a single transaction:
 - assigns every user, change request and audit log to it;
 - copies roles and the child tables unchanged, preserving primary keys;
 - converts naive SQLite timestamps (UTC by convention) to timezone-aware UTC;
+- applies the later schema rules: merge_request_url is merged into
+  pull_request_url, and NULL users.is_active/created_at/updated_at are backfilled;
 - resets every PostgreSQL sequence to MAX(id);
 - prints row counts per table for both databases.
 
@@ -73,6 +75,27 @@ def convert_row(row: dict, table) -> dict:
             value = bool(value)
         out[name] = value
     return out
+
+
+def adapt_legacy_row(name: str, raw: dict) -> dict:
+    """Apply the same data rules as the Alembic migrations to legacy SQLite rows."""
+    row = dict(raw)
+    if name == "git_context":
+        # merge_request_url was merged into pull_request_url (revision c5ee582f5a9e).
+        merge_url = row.pop("merge_request_url", None)
+        if merge_url and row.get("pull_request_url") and merge_url != row["pull_request_url"]:
+            fail(f"git_context id={row['id']} has different pull and merge request URLs; resolve it first.")
+        row["pull_request_url"] = row.get("pull_request_url") or merge_url
+    if name == "users":
+        # is_active / created_at / updated_at are NOT NULL; NULL is_active was
+        # treated as inactive by the application, so it stays inactive.
+        if row.get("is_active") is None:
+            row["is_active"] = False
+        if row.get("created_at") is None:
+            row["created_at"] = row.get("updated_at") or datetime.now(timezone.utc)
+        if row.get("updated_at") is None:
+            row["updated_at"] = row["created_at"]
+    return row
 
 
 def fail(message: str):
@@ -138,10 +161,10 @@ def main():
         source_counts = {}
         for name in TABLE_ORDER:
             table = tables[name]
-            src_rows = [dict(r) for r in src.execute(f'SELECT * FROM "{name}" ORDER BY id')]
+            src_rows = [adapt_legacy_row(name, dict(r)) for r in src.execute(f'SELECT * FROM "{name}" ORDER BY id')]
             source_counts[name] = len(src_rows)
 
-            src_cols = set(src_rows[0].keys()) if src_rows else set()
+            src_cols = {r[1] for r in src.execute(f'PRAGMA table_info("{name}")')}
             skipped = sorted(src_cols - set(table.c.keys()))
             if skipped:
                 print(f"  {name}: ignoring legacy source column(s) {', '.join(skipped)}")

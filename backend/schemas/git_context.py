@@ -50,12 +50,11 @@ class GitContextCreate(BaseModel):
     branch_name: str | None = None
     target_branch: str | None = None
     commit_hash: str | None = None
-    pull_request_url: str | None = None
-    merge_request_url: str | None = None
+    pull_request_url: str | None = None  # pull request or merge request URL
     changed_files_summary: str | None = None
     diff_text: str | None = None
 
-    @field_validator("repository_url", "pull_request_url", "merge_request_url", mode="before")
+    @field_validator("repository_url", "pull_request_url", mode="before")
     @classmethod
     def validate_url_fields(cls, v):
         return _validate_url(v)
@@ -96,8 +95,7 @@ class GitContextResponse(BaseModel):
     branch_name: str | None = None
     target_branch: str | None = None
     commit_hash: str | None = None
-    pull_request_url: str | None = None
-    merge_request_url: str | None = None
+    pull_request_url: str | None = None  # pull request or merge request URL
     changed_files_summary: str | None = None
     diff_text: str | None = None
     created_at: datetime

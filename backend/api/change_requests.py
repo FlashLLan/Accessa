@@ -22,6 +22,7 @@ from backend.core.dependencies import (
     get_user_or_404,
 )
 from backend.services.audit_service import log_action
+from backend.core.timeutils import utc_now
 from backend.services.approval_service import can_user_decide_request
 from backend.models.comment import Comment
 from backend.schemas.comment import CommentCreate, CommentResponse
@@ -253,6 +254,7 @@ def reject_change_request(
 
     db.add(approval)
     change_request.status = RequestStatus.REJECTED
+    change_request.closed_at = utc_now()
     db.commit()
     db.refresh(change_request)
 
@@ -383,6 +385,7 @@ def submit_change_request(
         )
 
     change_request.status = RequestStatus.PENDING_REVIEW
+    change_request.submitted_at = utc_now()
     db.commit()
     db.refresh(change_request)
 
@@ -488,6 +491,7 @@ def apply_change_request(
         )
 
     change_request.status = RequestStatus.APPLIED
+    change_request.closed_at = utc_now()
     db.commit()
     db.refresh(change_request)
 

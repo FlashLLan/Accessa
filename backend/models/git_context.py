@@ -16,8 +16,8 @@ class GitContext(Base):
     branch_name = Column(Text, nullable=True)
     target_branch = Column(Text, nullable=True)
     commit_hash = Column(Text, nullable=True)
+    # Pull request (GitHub) or merge request (GitLab) URL; one field for both.
     pull_request_url = Column(Text, nullable=True)
-    merge_request_url = Column(Text, nullable=True)
     changed_files_summary = Column(Text, nullable=True)
     diff_text = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now)

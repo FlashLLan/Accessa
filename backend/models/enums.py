@@ -37,10 +37,6 @@ class RequestStatus(str, enum.Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     APPLIED = "applied"
-    ESCALATED = "escalated"
-    DELEGATED = "delegated"
-    CLOSED = "closed"
-    CANCELLED = "cancelled"
 
 
 class ApprovalDecision(str, enum.Enum):
@@ -49,11 +45,7 @@ class ApprovalDecision(str, enum.Enum):
 
 
 class ReviewActionType(str, enum.Enum):
-    APPROVE = "approve"
-    REJECT = "reject"
+    # Escalation and delegation are the only review actions recorded here;
+    # approvals and comments have their own tables.
     DELEGATE = "delegate"
     ESCALATE = "escalate"
-    COMMENT = "comment"
-    ASSIGN = "assign"
-    RETURN_FOR_CHANGES = "return_for_changes"
-    START_REVIEW = "start_review"

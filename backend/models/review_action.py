@@ -13,9 +13,7 @@ class ReviewAction(Base):
     change_request_id = Column(Integer, ForeignKey("change_requests.id"), nullable=False)
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     action_type = Column(Enum(ReviewActionType, name="review_action_type", native_enum=False, create_constraint=True), nullable=False)
-    target_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    from_status = Column(Text, nullable=True)
-    to_status = Column(Text, nullable=True)
+    target_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     comment = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now)
 

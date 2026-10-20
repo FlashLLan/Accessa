@@ -429,7 +429,9 @@ def test_escalate_creates_review_action_record(
     assert a.actor_id == reviewer.id
     assert a.target_reviewer_id == target.id
     assert a.comment == "complexity reason"
-    assert a.to_status == RequestStatus.PENDING_REVIEW.value
+    # review_actions.to_status was dropped; the request itself stays pending review.
+    db.refresh(req)
+    assert req.status == RequestStatus.PENDING_REVIEW
 
 
 # ===========================================================================
