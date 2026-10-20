@@ -129,8 +129,7 @@ def list_change_requests(
 
     return scoped(db, ChangeRequest, workspace_id).filter(
         (ChangeRequest.created_by == current_user.id) |
-        (ChangeRequest.assigned_reviewer_id == current_user.id) |
-        (ChangeRequest.current_reviewer_id == current_user.id)
+        (ChangeRequest.assigned_reviewer_id == current_user.id)
     ).order_by(ChangeRequest.created_at.desc()).all()
 
 
@@ -146,8 +145,7 @@ def get_change_request(
     if current_user.role.name != "admin":
         if (
             change_request.created_by != current_user.id and
-            change_request.assigned_reviewer_id != current_user.id and
-            change_request.current_reviewer_id != current_user.id
+            change_request.assigned_reviewer_id != current_user.id
         ):
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -175,8 +173,8 @@ def approve_change_request(
             raise HTTPException(status_code=400, detail="Only pending requests can be approved")
         if reason == "self_approval":
             raise HTTPException(status_code=403, detail="You cannot approve your own request")
-        if reason == "not_current_reviewer":
-            raise HTTPException(status_code=403, detail="This request has been escalated or delegated to another reviewer.")
+        if reason == "not_assigned_reviewer":
+            raise HTTPException(status_code=403, detail="Only the assigned reviewer can decide this request")
         if reason == "admin_insufficient_admins":
             raise HTTPException(
                 status_code=400,
@@ -236,8 +234,8 @@ def reject_change_request(
             raise HTTPException(status_code=400, detail="Only pending requests can be rejected")
         if reason == "self_approval":
             raise HTTPException(status_code=403, detail="You cannot reject your own request")
-        if reason == "not_current_reviewer":
-            raise HTTPException(status_code=403, detail="This request has been escalated or delegated to another reviewer.")
+        if reason == "not_assigned_reviewer":
+            raise HTTPException(status_code=403, detail="Only the assigned reviewer can decide this request")
         if reason == "admin_insufficient_admins":
             raise HTTPException(
                 status_code=400,
@@ -289,8 +287,7 @@ def get_request_approvals(
     if current_user.role.name != "admin":
         if (
             change_request.created_by != current_user.id and
-            change_request.assigned_reviewer_id != current_user.id and
-            change_request.current_reviewer_id != current_user.id
+            change_request.assigned_reviewer_id != current_user.id
         ):
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -414,8 +411,7 @@ def list_request_comments(
     if current_user.role.name != "admin":
         if (
             change_request.created_by != current_user.id and
-            change_request.assigned_reviewer_id != current_user.id and
-            change_request.current_reviewer_id != current_user.id
+            change_request.assigned_reviewer_id != current_user.id
         ):
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -440,8 +436,7 @@ def add_comment_to_request(
     if current_user.role.name != "admin":
         if (
             change_request.created_by != current_user.id and
-            change_request.assigned_reviewer_id != current_user.id and
-            change_request.current_reviewer_id != current_user.id
+            change_request.assigned_reviewer_id != current_user.id
         ):
             raise HTTPException(status_code=403, detail="Access denied")
 

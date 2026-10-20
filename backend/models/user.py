@@ -49,13 +49,6 @@ class User(Base):
         foreign_keys="ChangeRequest.assigned_reviewer_id",
     )
 
-    current_reviews = relationship(
-        "ChangeRequest",
-        back_populates="current_reviewer",
-        primaryjoin="User.id == ChangeRequest.current_reviewer_id",
-        foreign_keys="ChangeRequest.current_reviewer_id",
-    )
-
     comments = relationship("Comment", back_populates="user")
     approvals = relationship("Approval", back_populates="reviewer")
     audit_logs = relationship("AuditLog", back_populates="user")

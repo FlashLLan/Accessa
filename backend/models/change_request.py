@@ -16,11 +16,9 @@ class ChangeRequest(Base):
     __table_args__ = (
         # Composite foreign keys: every user a request points at must belong to the
         # request's own workspace. Enforced by the database, independently of the
-        # application code. current_reviewer_id is nullable; with the default
-        # MATCH SIMPLE semantics a NULL there skips the check.
+        # application code.
         ForeignKeyConstraint(["workspace_id", "created_by"], ["users.workspace_id", "users.id"]),
         ForeignKeyConstraint(["workspace_id", "assigned_reviewer_id"], ["users.workspace_id", "users.id"]),
-        ForeignKeyConstraint(["workspace_id", "current_reviewer_id"], ["users.workspace_id", "users.id"]),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -38,8 +36,8 @@ class ChangeRequest(Base):
     )
 
     created_by = Column(Integer, nullable=False)
+    # The one reviewer who may decide the request; escalation/delegation move it.
     assigned_reviewer_id = Column(Integer, nullable=False)
-    current_reviewer_id = Column(Integer, nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
@@ -58,13 +56,6 @@ class ChangeRequest(Base):
         back_populates="assigned_reviews",
         primaryjoin="User.id == ChangeRequest.assigned_reviewer_id",
         foreign_keys=[assigned_reviewer_id],
-    )
-
-    current_reviewer = relationship(
-        "User",
-        back_populates="current_reviews",
-        primaryjoin="User.id == ChangeRequest.current_reviewer_id",
-        foreign_keys=[current_reviewer_id],
     )
 
     comments = relationship("Comment", back_populates="change_request", cascade="all, delete-orphan")

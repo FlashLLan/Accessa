@@ -13,15 +13,10 @@ router = APIRouter(prefix="/change-requests", tags=["AI Review"])
 
 
 def _check_access(cr: ChangeRequest, current_user: User):
-    # Same rule as the other request endpoints: admin, creator, assigned reviewer,
-    # or the current reviewer after an escalation/delegation.
+    # Same rule as the other request endpoints: admin, creator or assigned reviewer.
     if current_user.role.name == "admin":
         return
-    authorized = (
-        cr.created_by == current_user.id
-        or cr.assigned_reviewer_id == current_user.id
-        or (cr.current_reviewer_id is not None and cr.current_reviewer_id == current_user.id)
-    )
+    authorized = cr.created_by == current_user.id or cr.assigned_reviewer_id == current_user.id
     if not authorized:
         raise HTTPException(status_code=403, detail="Access denied")
 

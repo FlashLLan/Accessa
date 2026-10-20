@@ -337,22 +337,20 @@ def test_cannot_escalate_or_delegate_to_user_in_another_workspace(client, db, ws
 @pytest.mark.parametrize("column,constraint", [
     ("assigned_reviewer_id", "fk_change_requests_workspace_id_assigned_reviewer_id_users"),
     ("created_by", "fk_change_requests_workspace_id_created_by_users"),
-    ("current_reviewer_id", "fk_change_requests_workspace_id_current_reviewer_id_users"),
 ])
 def test_database_rejects_change_request_referencing_user_of_another_workspace(app_db_engine, ws, column, constraint):
     values = {
         "created_by": ws["junior_a"].id,
         "assigned_reviewer_id": ws["mid_a"].id,
-        "current_reviewer_id": None,
     }
     values[column] = ws["mid_b"].id  # user from workspace B on a workspace-A request
 
     with pytest.raises(IntegrityError) as exc, app_db_engine.begin() as conn:
         conn.execute(text(
             "INSERT INTO change_requests (workspace_id, title, description, request_type, target_system, "
-            "environment, risk_level, status, created_by, assigned_reviewer_id, current_reviewer_id) "
+            "environment, risk_level, status, created_by, assigned_reviewer_id) "
             "VALUES (:ws, 'x', 'x', 'ACCESS_CHANGE', 'srv', 'DEV', 'LOW', 'DRAFT', "
-            ":created_by, :assigned_reviewer_id, :current_reviewer_id)"
+            ":created_by, :assigned_reviewer_id)"
         ), {"ws": ws["a"].id, **values})
 
     assert isinstance(exc.value.orig, psycopg.errors.ForeignKeyViolation)
@@ -363,8 +361,8 @@ def test_database_accepts_change_request_with_users_of_its_own_workspace(app_db_
     with app_db_engine.begin() as conn:
         conn.execute(text(
             "INSERT INTO change_requests (workspace_id, title, description, request_type, target_system, "
-            "environment, risk_level, status, created_by, assigned_reviewer_id, current_reviewer_id) "
-            "VALUES (:ws, 'x', 'x', 'ACCESS_CHANGE', 'srv', 'DEV', 'LOW', 'DRAFT', :c, :r, NULL)"
+            "environment, risk_level, status, created_by, assigned_reviewer_id) "
+            "VALUES (:ws, 'x', 'x', 'ACCESS_CHANGE', 'srv', 'DEV', 'LOW', 'DRAFT', :c, :r)"
         ), {"ws": ws["a"].id, "c": ws["junior_a"].id, "r": ws["mid_a"].id})
 
 
@@ -635,8 +633,9 @@ def test_two_admin_rule_counts_only_admins_of_request_workspace(client, db, role
     assert change_requests_api._get_active_admin_count(db, ws["a"].id) == 1
     assert change_requests_api._get_active_admin_count(db, ws["b"].id) == 2
 
+    # The approver must be the assigned reviewer to reach the two-admin check.
     admin_request = seed_change_request(
-        db, creator_id=ws["admin_a"].id, reviewer_id=ws["admin_a"].id, status=RequestStatus.PENDING_REVIEW
+        db, creator_id=ws["admin_a"].id, reviewer_id=inactive_admin_a.id, status=RequestStatus.PENDING_REVIEW
     )
     # With a global count (3 active admins) this would be allowed; per workspace it is not.
     allowed, reason = can_user_decide_request(

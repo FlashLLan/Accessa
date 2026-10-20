@@ -623,11 +623,12 @@ def test_creator_cannot_approve_own_request_even_if_assigned_as_reviewer(
     assert response.json()["detail"] == "You cannot approve your own request"
 
 
-def test_role_eligible_non_assigned_reviewer_can_approve_request(
+def test_role_eligible_non_assigned_reviewer_cannot_approve_request(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
-    # Approval is now matrix-based: any eligible role may approve, not just the assigned reviewer.
-    # junior + low allows: mid, senior, lead — so a lead who is not the assigned reviewer may approve.
+    # Deliberate change: only the assigned reviewer may decide. junior + low allows
+    # mid, senior and lead by the matrix, but a lead who is not the assigned
+    # reviewer is refused.
     junior_role = create_role(db, "junior", level=1)
     senior_role = create_role(db, "senior", level=5)
     lead_role = create_role(db, "lead", level=8)
@@ -651,14 +652,16 @@ def test_role_eligible_non_assigned_reviewer_can_approve_request(
         json={"decision_comment": "Approved by eligible lead"},
     )
 
-    assert response.status_code == 200, response.text
-    assert response.json()["status"] == RequestStatus.APPROVED.value
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Only the assigned reviewer can decide this request"
+    db.refresh(req)
+    assert req.status == RequestStatus.PENDING_REVIEW
 
 
-def test_role_eligible_non_assigned_reviewer_can_reject_request(
+def test_role_eligible_non_assigned_reviewer_cannot_reject_request(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
-    # Same as above but for rejection.
+    # Same as above but for rejection (deliberate change: assigned reviewer only).
     junior_role = create_role(db, "junior", level=1)
     senior_role = create_role(db, "senior", level=5)
     lead_role = create_role(db, "lead", level=8)
@@ -682,8 +685,10 @@ def test_role_eligible_non_assigned_reviewer_can_reject_request(
         json={"decision_comment": "Rejected by eligible lead"},
     )
 
-    assert response.status_code == 200, response.text
-    assert response.json()["status"] == RequestStatus.REJECTED.value
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Only the assigned reviewer can decide this request"
+    db.refresh(req)
+    assert req.status == RequestStatus.PENDING_REVIEW
 
 
 def test_rejected_request_cannot_be_updated_or_resubmitted(
@@ -769,7 +774,7 @@ def test_matrix_case_01_mid_can_approve_junior_low(
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
     approver = create_user(db, role=mid_role, label="mid")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.LOW)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -804,7 +809,7 @@ def test_matrix_case_03_senior_can_approve_junior_medium(
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
     approver = create_user(db, role=senior_role, label="senior")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.MEDIUM)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.MEDIUM)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -822,7 +827,7 @@ def test_matrix_case_04_senior_can_approve_junior_high(
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
     approver = create_user(db, role=senior_role, label="senior")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.HIGH)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -872,7 +877,7 @@ def test_matrix_case_07_senior_can_approve_mid_medium(
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
     approver = create_user(db, role=senior_role, label="senior")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.MEDIUM)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.MEDIUM)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -890,7 +895,7 @@ def test_matrix_case_08_senior_can_approve_mid_high(
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
     approver = create_user(db, role=senior_role, label="senior")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.HIGH)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -1014,7 +1019,7 @@ def test_matrix_case_16_admin_can_approve_another_admin_low_with_two_admins(
     approver = create_user(db, role=admin_role, label="admin_approver")
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.LOW)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -1031,7 +1036,7 @@ def test_matrix_case_17_admin_can_approve_another_admin_medium_with_two_admins(
     approver = create_user(db, role=admin_role, label="admin_approver")
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.MEDIUM)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.MEDIUM)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -1048,7 +1053,7 @@ def test_matrix_case_18_admin_can_approve_another_admin_high_with_two_admins(
     approver = create_user(db, role=admin_role, label="admin_approver")
     dummy_reviewer = create_user(db, role=lead_role, label="lead")
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.HIGH)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.HIGH)
     login_user(approver)
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})
@@ -1307,7 +1312,7 @@ def test_matrix_case_31_admin_workflow_fails_when_fewer_than_two_active_admins(
     approver.is_active = False
     db.commit()
 
-    req = _make_pending_request(db, creator=creator, reviewer=dummy_reviewer, risk_level=RiskLevel.LOW)
+    req = _make_pending_request(db, creator=creator, reviewer=approver, risk_level=RiskLevel.LOW)
     login_user(approver)  # auth override bypasses is_active check
 
     r = client.post(f"/change-requests/{req.id}/approve", json={})

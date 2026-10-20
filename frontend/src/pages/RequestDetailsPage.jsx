@@ -179,7 +179,6 @@ export default function RequestDetailsPage() {
         const pastActorIds = reviewActionsData.map(a => a.actor?.id).filter(Boolean);
         const excluded = new Set([
           requestData.assigned_reviewer?.id,
-          requestData.current_reviewer?.id,
           ...pastActorIds,
         ].filter(Boolean));
         setAvailableReviewers(reviewers.filter(r => !excluded.has(r.id)));

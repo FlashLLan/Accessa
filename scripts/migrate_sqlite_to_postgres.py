@@ -13,7 +13,8 @@ What it does, in a single transaction:
 - copies roles and the child tables unchanged, preserving primary keys;
 - converts naive SQLite timestamps (UTC by convention) to timezone-aware UTC;
 - applies the later schema rules: merge_request_url is merged into
-  pull_request_url, and NULL users.is_active/created_at/updated_at are backfilled;
+  pull_request_url, NULL users.is_active/created_at/updated_at are backfilled,
+  and a set current_reviewer_id becomes the assigned reviewer;
 - resets every PostgreSQL sequence to MAX(id);
 - prints row counts per table for both databases.
 
@@ -80,6 +81,12 @@ def convert_row(row: dict, table) -> dict:
 def adapt_legacy_row(name: str, raw: dict) -> dict:
     """Apply the same data rules as the Alembic migrations to legacy SQLite rows."""
     row = dict(raw)
+    if name == "change_requests":
+        # current_reviewer_id was removed (revision after c5ee582f5a9e): the reviewer
+        # who held the request after a transfer becomes its assigned reviewer.
+        current = row.pop("current_reviewer_id", None)
+        if current is not None:
+            row["assigned_reviewer_id"] = current
     if name == "git_context":
         # merge_request_url was merged into pull_request_url (revision c5ee582f5a9e).
         merge_url = row.pop("merge_request_url", None)

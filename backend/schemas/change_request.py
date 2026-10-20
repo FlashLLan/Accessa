@@ -28,7 +28,6 @@ class ChangeRequestResponse(BaseModel):
     status: RequestStatus
     creator: UserShortResponse
     assigned_reviewer: UserShortResponse
-    current_reviewer: UserShortResponse | None = None
     created_at: datetime
     updated_at: datetime
     git_context: GitContextResponse | None = None

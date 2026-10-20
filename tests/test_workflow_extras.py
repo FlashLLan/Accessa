@@ -210,24 +210,27 @@ def test_update_to_high_risk_fails_with_ineligible_reviewer(client, db, create_u
     assert response.json()["detail"] == "Assigned reviewer is not eligible to review this type of request."
 
 @pytest.mark.parametrize("method", ["get", "post"])
-def test_current_reviewer_can_access_ai_review(
+def test_ai_review_follows_assigned_reviewer_after_escalation(
     client, db, create_user, create_role, login_user, seed_change_request, method
 ):
-    # After escalation/delegation the current reviewer may differ from the assigned
-    # one; AI review must follow the same access rule as Git context and comments.
+    # AI review uses the same access rule as Git context and comments: admin,
+    # creator or assigned reviewer. After an escalation the new reviewer gains
+    # access and the previous reviewer loses it.
     junior = create_role(db, "junior", level=1)
     mid = create_role(db, "mid", level=2)
+    senior = create_role(db, "senior", level=3)
     creator = create_user(db, role=junior, label="creator")
-    assigned = create_user(db, role=mid, label="assigned")
-    current = create_user(db, role=mid, label="current")
+    previous = create_user(db, role=mid, label="previous")
+    escalated_to = create_user(db, role=senior, label="escalated_to")
     outsider = create_user(db, role=mid, label="outsider")
 
-    req = seed_change_request(db, creator_id=creator.id, reviewer_id=assigned.id)
-    req.current_reviewer_id = current.id
-    db.commit()
+    req = seed_change_request(db, creator_id=creator.id, reviewer_id=previous.id, status=RequestStatus.PENDING_REVIEW)
+    login_user(previous)
+    assert client.post(f"/change-requests/{req.id}/escalate", json={"target_reviewer_id": escalated_to.id}).status_code == 200
 
-    login_user(current)
+    login_user(escalated_to)
     assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 200
 
-    login_user(outsider)
-    assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 403
+    for user in (previous, outsider):
+        login_user(user)
+        assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 403

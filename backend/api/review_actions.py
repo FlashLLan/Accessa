@@ -29,11 +29,7 @@ class ReviewTransferPayload(BaseModel):
 def _check_access(cr: ChangeRequest, current_user: User):
     if current_user.role.name == "admin":
         return
-    if (
-        cr.created_by != current_user.id
-        and cr.assigned_reviewer_id != current_user.id
-        and cr.current_reviewer_id != current_user.id
-    ):
+    if cr.created_by != current_user.id and cr.assigned_reviewer_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
@@ -48,17 +44,15 @@ def _get_target_reviewer(target_id: int, current_user: User, db: Session, worksp
 
 
 def _assert_can_transfer(cr: ChangeRequest, current_user: User, verb: str):
-    """Only the reviewer who currently holds the request (or an admin) may hand it on.
+    """Only the assigned reviewer (or an admin) may hand a request on.
 
-    Once current_reviewer_id is set (after an escalation or delegation) that user
-    holds the request; the original assigned_reviewer_id loses the right to
-    escalate or delegate it. Before that, the assigned reviewer holds it.
+    Escalation and delegation move assigned_reviewer_id to the target, so after
+    a transfer the previous reviewer loses this right automatically.
     """
     if current_user.role.name == "admin":
         return
-    holder_id = cr.current_reviewer_id if cr.current_reviewer_id is not None else cr.assigned_reviewer_id
-    if current_user.id != holder_id:
-        raise HTTPException(status_code=403, detail=f"Only the current reviewer or admin can {verb}")
+    if current_user.id != cr.assigned_reviewer_id:
+        raise HTTPException(status_code=403, detail=f"Only the assigned reviewer or admin can {verb}")
 
 
 def _assert_matrix_eligible(target: User, cr: ChangeRequest):
@@ -131,7 +125,6 @@ def escalate_request(
     _assert_matrix_eligible(target, cr)
 
     cr.assigned_reviewer_id = target.id
-    cr.current_reviewer_id = target.id
 
     action = ReviewAction(
         change_request_id=request_id,
@@ -207,7 +200,6 @@ def delegate_request(
         )
 
     cr.assigned_reviewer_id = target.id
-    cr.current_reviewer_id = target.id
     cr.status = RequestStatus.PENDING_REVIEW
 
     action = ReviewAction(

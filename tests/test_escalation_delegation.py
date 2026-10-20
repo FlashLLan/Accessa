@@ -67,7 +67,6 @@ def test_escalate_mid_to_senior_junior_low(
 
     db.refresh(req)
     assert req.assigned_reviewer_id == target.id
-    assert req.current_reviewer_id  == target.id
     assert req.status == RequestStatus.PENDING_REVIEW
 
 
@@ -540,7 +539,6 @@ def test_delegate_senior_to_another_senior(
 
     db.refresh(req)
     assert req.assigned_reviewer_id == target.id
-    assert req.current_reviewer_id  == target.id
     assert req.status == RequestStatus.PENDING_REVIEW
 
 
@@ -1054,7 +1052,7 @@ def test_eligible_non_current_reviewer_cannot_delegate_when_locked(
 
 
 # ===========================================================================
-# Only the current reviewer (or an admin) may escalate or delegate
+# Only the assigned reviewer (or an admin) may escalate or delegate
 # ===========================================================================
 
 @pytest.fixture
@@ -1076,7 +1074,7 @@ def escalated_request(db, create_role, create_user, login_user, seed_change_requ
     login_user(people["a"])
     assert _escalate(client, req.id, people["b"].id).status_code == 200
     db.refresh(req)
-    assert req.current_reviewer_id == people["b"].id
+    assert req.assigned_reviewer_id == people["b"].id
     return {"req": req, "roles": roles, **people}
 
 
@@ -1092,33 +1090,14 @@ def test_original_reviewer_cannot_escalate_or_delegate_after_escalation(
     response = transfer(client, ctx["req"].id, ctx[target].id)
 
     assert response.status_code == 403
-    assert response.json()["detail"] == f"Only the current reviewer or admin can {action}"
+    assert response.json()["detail"] == f"Only the assigned reviewer or admin can {action}"
     db.refresh(ctx["req"])
-    assert ctx["req"].current_reviewer_id == ctx["b"].id
+    assert ctx["req"].assigned_reviewer_id == ctx["b"].id
     assert len(_review_actions(db, ctx["req"].id)) == actions_before
 
 
-@pytest.mark.parametrize("action,target", [("escalate", "lead"), ("delegate", "other_mid")])
-def test_assigned_reviewer_loses_transfer_right_once_current_reviewer_is_set(
-    client, db, login_user, escalated_request, action, target
-):
-    # The rule must hold even if assigned_reviewer_id still names A while
-    # current_reviewer_id names B (the API sets both, but the check may not rely on it).
-    ctx = escalated_request
-    ctx["req"].assigned_reviewer_id = ctx["a"].id
-    db.commit()
-
-    login_user(ctx["a"])
-    transfer = _escalate if action == "escalate" else _delegate
-    response = transfer(client, ctx["req"].id, ctx[target].id)
-
-    assert response.status_code == 403
-    db.refresh(ctx["req"])
-    assert (ctx["req"].assigned_reviewer_id, ctx["req"].current_reviewer_id) == (ctx["a"].id, ctx["b"].id)
-
-
 @pytest.mark.parametrize("action,target", [("escalate", "lead"), ("delegate", "other_senior")])
-def test_current_reviewer_can_still_escalate_or_delegate_after_escalation(
+def test_new_assigned_reviewer_can_escalate_or_delegate_after_escalation(
     client, db, login_user, escalated_request, action, target
 ):
     ctx = escalated_request
@@ -1129,12 +1108,12 @@ def test_current_reviewer_can_still_escalate_or_delegate_after_escalation(
 
     assert response.status_code == 200, response.text
     db.refresh(ctx["req"])
-    assert ctx["req"].current_reviewer_id == ctx[target].id
+    assert ctx["req"].assigned_reviewer_id == ctx[target].id
 
 
 @pytest.mark.parametrize("action", ["escalate", "delegate"])
-def test_admin_is_not_blocked_by_current_reviewer_rule(client, login_user, escalated_request, action):
-    # The admin is neither assigned nor current reviewer, yet passes the permission
+def test_admin_is_not_blocked_by_assigned_reviewer_rule(client, login_user, escalated_request, action):
+    # The admin is not the assigned reviewer, yet passes the permission
     # check. On a junior's request the hierarchy/matrix rules then refuse the
     # transfer itself (400), which is not a permission denial.
     ctx = escalated_request
@@ -1156,12 +1135,31 @@ def test_admin_can_delegate_request_held_by_another_admin(
     target = create_user(db, role=admin_role, label="admin_target")
 
     req = _pending(db, seed_change_request, creator_id=creator.id, reviewer_id=holder.id)
-    req.current_reviewer_id = holder.id
-    db.commit()
 
     login_user(acting)
     response = _delegate(client, req.id, target.id)
 
     assert response.status_code == 200, response.text
     db.refresh(req)
-    assert req.current_reviewer_id == target.id
+    assert req.assigned_reviewer_id == target.id
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_after_escalation_previous_reviewer_cannot_decide_and_new_reviewer_can(
+    client, db, login_user, escalated_request, decision
+):
+    ctx = escalated_request  # A (mid) escalated to B (senior); B is now the assigned reviewer
+
+    login_user(ctx["a"])
+    for verb in ("approve", "reject"):
+        refused = client.post(f"/change-requests/{ctx['req'].id}/{verb}", json={"decision_comment": "x"})
+        assert refused.status_code == 403
+        assert refused.json()["detail"] == "Only the assigned reviewer can decide this request"
+    db.refresh(ctx["req"])
+    assert ctx["req"].status == RequestStatus.PENDING_REVIEW
+
+    login_user(ctx["b"])
+    decided = client.post(f"/change-requests/{ctx['req'].id}/{decision}", json={"decision_comment": "ok"})
+    assert decided.status_code == 200, decided.text
+    expected = RequestStatus.APPROVED if decision == "approve" else RequestStatus.REJECTED
+    assert decided.json()["status"] == expected.value

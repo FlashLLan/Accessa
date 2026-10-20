@@ -43,7 +43,7 @@ def can_user_decide_request(
       "self_approval"             - approver is the requester
       "invalid_matrix_key"        - unsupported requester role / severity combination
       "unauthorized_role"         - approver role not in the matrix for this request
-      "not_current_reviewer"      - request was escalated/delegated to a specific reviewer
+      "not_assigned_reviewer"     - approver is not the request's assigned reviewer
       "admin_insufficient_admins" - admin workflow requires >= 2 active admins
 
     Evaluation order per spec:
@@ -51,7 +51,8 @@ def can_user_decide_request(
       2. approver is not the requester
       3. requester role + severity exist in the matrix
       4. approver role is in the allowed set
-      5. if current_reviewer_id is set, approver must be that user
+      5. approver must be the assigned reviewer (escalation and delegation move
+         assigned_reviewer_id to the new reviewer, so this also covers transfers)
       6. if requester is admin, active_admin_count >= 2
     """
     if request_obj.status != RequestStatus.PENDING_REVIEW:
@@ -70,9 +71,8 @@ def can_user_decide_request(
     if approver.role.name not in allowed_roles:
         return False, "unauthorized_role"
 
-    if request_obj.current_reviewer_id is not None:
-        if approver.id != request_obj.current_reviewer_id:
-            return False, "not_current_reviewer"
+    if approver.id != request_obj.assigned_reviewer_id:
+        return False, "not_assigned_reviewer"
 
     if requester_role == "admin":
         if active_admin_count is None or active_admin_count < 2:
