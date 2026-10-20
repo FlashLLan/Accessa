@@ -315,10 +315,10 @@ def update_change_request(
     if change_request.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only the creator can edit this request")
 
-    if change_request.status not in [RequestStatus.DRAFT, RequestStatus.REJECTED]:
+    if change_request.status != RequestStatus.DRAFT:
         raise HTTPException(
             status_code=400,
-            detail="Only draft or rejected requests can be edited"
+            detail="Only draft requests can be edited"
         )
 
     if request_data.assigned_reviewer_id is not None:
@@ -376,10 +376,10 @@ def submit_change_request(
     if change_request.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only the creator can submit this request")
 
-    if change_request.status not in [RequestStatus.DRAFT, RequestStatus.REJECTED]:
+    if change_request.status != RequestStatus.DRAFT:
         raise HTTPException(
             status_code=400,
-            detail="Only draft or rejected requests can be submitted for review"
+            detail="Only draft requests can be submitted for review"
         )
 
     change_request.status = RequestStatus.PENDING_REVIEW

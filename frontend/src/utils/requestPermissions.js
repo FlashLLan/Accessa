@@ -47,7 +47,7 @@ export function isAdmin(user) {
 export function canSubmitRequest(user, request) {
   return (
     isRequestCreator(user, request) &&
-    (request?.status === "draft" || request?.status === "rejected")
+    request?.status === "draft"
   );
 }
 

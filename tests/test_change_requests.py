@@ -339,7 +339,7 @@ def test_update_change_request_blocks_edit_when_pending_review(client, db):
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Only draft or rejected requests can be edited"
+    assert response.json()["detail"] == "Only draft requests can be edited"
 
 
 def test_approve_change_request_by_assigned_reviewer(client, db):
@@ -686,7 +686,7 @@ def test_role_eligible_non_assigned_reviewer_can_reject_request(
     assert response.json()["status"] == RequestStatus.REJECTED.value
 
 
-def test_rejected_request_can_be_updated_and_resubmitted(
+def test_rejected_request_cannot_be_updated_or_resubmitted(
     client, db, create_user, create_role, login_user, seed_change_request
 ):
     junior_role = create_role(db, "junior", level=1)
@@ -718,16 +718,19 @@ def test_rejected_request_can_be_updated_and_resubmitted(
         },
     )
 
-    assert patch_response.status_code == 200, patch_response.text
-    patch_data = patch_response.json()
-    assert patch_data["title"] == "Updated after rejection"
-    assert patch_data["status"] == RequestStatus.REJECTED.value
+    # Deliberate change: rejected is a final status, so a rejected request can no
+    # longer be edited or resubmitted (previously both succeeded).
+    assert patch_response.status_code == 400, patch_response.text
+    assert patch_response.json()["detail"] == "Only draft requests can be edited"
 
     submit_response = client.post(f"/change-requests/{req.id}/submit")
 
-    assert submit_response.status_code == 200, submit_response.text
-    submit_data = submit_response.json()
-    assert submit_data["status"] == RequestStatus.PENDING_REVIEW.value
+    assert submit_response.status_code == 400, submit_response.text
+    assert submit_response.json()["detail"] == "Only draft requests can be submitted for review"
+
+    db.refresh(req)
+    assert req.title == "Old title"
+    assert req.status == RequestStatus.REJECTED
 
 
 # ---------------------------------------------------------------------------
@@ -1398,6 +1401,64 @@ def test_creator_can_still_edit_and_submit_own_draft_after_admin_was_refused(cli
     edit = client.patch(f"/change-requests/{req.id}", json={"title": "Edited by creator"})
     assert edit.status_code == 200, edit.text
     assert edit.json()["title"] == "Edited by creator"
+
+    submit = client.post(f"/change-requests/{req.id}/submit")
+    assert submit.status_code == 200, submit.text
+    assert submit.json()["status"] == RequestStatus.PENDING_REVIEW.value
+
+
+# ---- rejected is a final status ----
+
+def _rejected_request(db):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.REJECTED,
+        title="Rejected title",
+    )
+    return creator, reviewer, req
+
+
+def test_editing_rejected_request_is_refused(client, db):
+    creator, reviewer, req = _rejected_request(db)
+
+    login_as(creator)
+    response = client.patch(f"/change-requests/{req.id}", json={"title": "Try again"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only draft requests can be edited"
+    db.refresh(req)
+    assert (req.title, req.status) == ("Rejected title", RequestStatus.REJECTED)
+
+
+def test_submitting_rejected_request_is_refused(client, db):
+    creator, reviewer, req = _rejected_request(db)
+
+    login_as(creator)
+    response = client.post(f"/change-requests/{req.id}/submit")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only draft requests can be submitted for review"
+    db.refresh(req)
+    assert req.status == RequestStatus.REJECTED
+
+
+def test_draft_can_still_be_edited_and_submitted(client, db):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+    req = seed_change_request(db, creator_id=creator.id, reviewer_id=reviewer.id, status=RequestStatus.DRAFT)
+
+    login_as(creator)
+    edit = client.patch(f"/change-requests/{req.id}", json={"title": "Edited draft"})
+    assert edit.status_code == 200, edit.text
+    assert edit.json()["title"] == "Edited draft"
 
     submit = client.post(f"/change-requests/{req.id}/submit")
     assert submit.status_code == 200, submit.text
