@@ -1331,3 +1331,74 @@ def test_matrix_case_34_missing_severity_rejected_safely():
 def test_matrix_case_35_missing_requester_role_rejected_safely():
     result = get_allowed_approver_roles("", "low")
     assert result == []
+
+# ---- only the creator may edit or submit (no admin exception) ----
+
+def _draft_with_admin(db):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+    admin_role = create_role(db, "admin", level=10)
+
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+    admin = create_user(db, role=admin_role, label="admin")
+
+    req = seed_change_request(
+        db,
+        creator_id=creator.id,
+        reviewer_id=reviewer.id,
+        status=RequestStatus.DRAFT,
+        title="Original title",
+    )
+    return creator, reviewer, admin, req
+
+
+def test_admin_cannot_edit_another_users_draft(client, db):
+    creator, reviewer, admin, req = _draft_with_admin(db)
+
+    login_as(admin)
+    response = client.patch(f"/change-requests/{req.id}", json={"title": "Edited by admin"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the creator can edit this request"
+    db.refresh(req)
+    assert req.title == "Original title"
+
+
+def test_admin_cannot_submit_another_users_draft(client, db):
+    creator, reviewer, admin, req = _draft_with_admin(db)
+
+    login_as(admin)
+    response = client.post(f"/change-requests/{req.id}/submit")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the creator can submit this request"
+    db.refresh(req)
+    assert req.status == RequestStatus.DRAFT
+
+
+def test_reviewer_cannot_edit_or_submit_creators_draft(client, db):
+    creator, reviewer, admin, req = _draft_with_admin(db)
+
+    login_as(reviewer)
+    edit = client.patch(f"/change-requests/{req.id}", json={"title": "Edited by reviewer"})
+    submit = client.post(f"/change-requests/{req.id}/submit")
+
+    assert (edit.status_code, edit.json()["detail"]) == (403, "Only the creator can edit this request")
+    assert (submit.status_code, submit.json()["detail"]) == (403, "Only the creator can submit this request")
+
+
+def test_creator_can_still_edit_and_submit_own_draft_after_admin_was_refused(client, db):
+    creator, reviewer, admin, req = _draft_with_admin(db)
+
+    login_as(admin)
+    assert client.patch(f"/change-requests/{req.id}", json={"title": "x"}).status_code == 403
+
+    login_as(creator)
+    edit = client.patch(f"/change-requests/{req.id}", json={"title": "Edited by creator"})
+    assert edit.status_code == 200, edit.text
+    assert edit.json()["title"] == "Edited by creator"
+
+    submit = client.post(f"/change-requests/{req.id}/submit")
+    assert submit.status_code == 200, submit.text
+    assert submit.json()["status"] == RequestStatus.PENDING_REVIEW.value

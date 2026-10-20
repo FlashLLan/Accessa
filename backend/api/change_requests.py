@@ -310,8 +310,10 @@ def update_change_request(
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
-    if change_request.created_by != current_user.id and current_user.role.name != "admin":
-        raise HTTPException(status_code=403, detail="Only the creator or admin can edit this request")
+    # Only the author may change or submit their own request; admins have no exception
+    # here, so an admin cannot alter or push someone else's draft into review.
+    if change_request.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the creator can edit this request")
 
     if change_request.status not in [RequestStatus.DRAFT, RequestStatus.REJECTED]:
         raise HTTPException(
@@ -369,8 +371,10 @@ def submit_change_request(
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
-    if change_request.created_by != current_user.id and current_user.role.name != "admin":
-        raise HTTPException(status_code=403, detail="Only the creator or admin can submit this request")
+    # Only the author may change or submit their own request; admins have no exception
+    # here, so an admin cannot alter or push someone else's draft into review.
+    if change_request.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the creator can submit this request")
 
     if change_request.status not in [RequestStatus.DRAFT, RequestStatus.REJECTED]:
         raise HTTPException(
