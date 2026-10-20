@@ -48,6 +48,20 @@ def _get_target_reviewer(target_id: int, current_user: User, db: Session, worksp
     return target
 
 
+def _assert_can_transfer(cr: ChangeRequest, current_user: User, verb: str):
+    """Only the reviewer who currently holds the request (or an admin) may hand it on.
+
+    Once current_reviewer_id is set (after an escalation or delegation) that user
+    holds the request; the original assigned_reviewer_id loses the right to
+    escalate or delegate it. Before that, the assigned reviewer holds it.
+    """
+    if current_user.role.name == "admin":
+        return
+    holder_id = cr.current_reviewer_id if cr.current_reviewer_id is not None else cr.assigned_reviewer_id
+    if current_user.id != holder_id:
+        raise HTTPException(status_code=403, detail=f"Only the current reviewer or admin can {verb}")
+
+
 def _assert_matrix_eligible(target: User, cr: ChangeRequest):
     eligible_roles = get_allowed_approver_roles(cr.creator.role.name, cr.risk_level.value)
     if target.role.name not in eligible_roles:
@@ -85,9 +99,7 @@ def escalate_request(
 ):
     cr = get_request_or_404(db, workspace_id, request_id)
 
-    if current_user.role.name != "admin":
-        if cr.assigned_reviewer_id != current_user.id and cr.current_reviewer_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can escalate")
+    _assert_can_transfer(cr, current_user, "escalate")
 
     if cr.status != RequestStatus.PENDING_REVIEW:
         raise HTTPException(status_code=400, detail="Only pending requests can be escalated")
@@ -159,9 +171,7 @@ def delegate_request(
 ):
     cr = get_request_or_404(db, workspace_id, request_id)
 
-    if current_user.role.name != "admin":
-        if cr.assigned_reviewer_id != current_user.id and cr.current_reviewer_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Only the assigned reviewer or admin can delegate")
+    _assert_can_transfer(cr, current_user, "delegate")
 
     if cr.status != RequestStatus.PENDING_REVIEW:
         raise HTTPException(status_code=400, detail="Only pending requests can be delegated")
