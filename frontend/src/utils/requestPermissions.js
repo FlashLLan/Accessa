@@ -78,9 +78,7 @@ export function canRejectRequest(user, request) {
 }
 
 export function canApplyRequest(user, request) {
-  return request?.status === "approved" && (
-    isRequestCreator(user, request) || isAdmin(user)
-  );
+  return request?.status === "approved" && isRequestCreator(user, request);
 }
 
 export function canViewRequestComments(user, request) {

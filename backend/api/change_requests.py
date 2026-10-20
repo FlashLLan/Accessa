@@ -475,10 +475,10 @@ def apply_change_request(
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
-    if current_user.role.name != "admin" and change_request.created_by != current_user.id:
+    if change_request.created_by != current_user.id:
         raise HTTPException(
             status_code=403,
-            detail="Only the creator or admin can mark this request as applied"
+            detail="Only the creator can mark this request as applied"
         )
 
     if change_request.status != RequestStatus.APPROVED:

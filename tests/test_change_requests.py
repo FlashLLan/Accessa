@@ -510,7 +510,7 @@ def test_unrelated_user_cannot_mark_request_as_applied(
     response = client.post(f"/change-requests/{req.id}/apply")
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Only the creator or admin can mark this request as applied"
+    assert response.json()["detail"] == "Only the creator can mark this request as applied"
 
 def test_cannot_approve_request_unless_pending_review(
     client, db, create_user, create_role, login_user, seed_change_request
@@ -1463,3 +1463,41 @@ def test_draft_can_still_be_edited_and_submitted(client, db):
     submit = client.post(f"/change-requests/{req.id}/submit")
     assert submit.status_code == 200, submit.text
     assert submit.json()["status"] == RequestStatus.PENDING_REVIEW.value
+
+
+# ---- only the creator may mark a request as applied (no admin exception) ----
+
+def _approved_request_with_admin(db):
+    junior_role = create_role(db, "junior", level=1)
+    senior_role = create_role(db, "senior", level=5)
+    admin_role = create_role(db, "admin", level=10)
+    creator = create_user(db, role=junior_role, label="junior")
+    reviewer = create_user(db, role=senior_role, label="senior")
+    admin = create_user(db, role=admin_role, label="admin")
+    req = seed_change_request(db, creator_id=creator.id, reviewer_id=reviewer.id, status=RequestStatus.APPROVED)
+    return creator, admin, req
+
+
+def test_admin_who_is_not_creator_cannot_mark_request_as_applied(client, db):
+    creator, admin, req = _approved_request_with_admin(db)
+
+    login_as(admin)
+    response = client.post(f"/change-requests/{req.id}/apply")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the creator can mark this request as applied"
+    db.refresh(req)
+    assert req.status == RequestStatus.APPROVED
+
+
+def test_creator_can_mark_request_as_applied_after_admin_was_refused(client, db):
+    creator, admin, req = _approved_request_with_admin(db)
+
+    login_as(admin)
+    assert client.post(f"/change-requests/{req.id}/apply").status_code == 403
+
+    login_as(creator)
+    response = client.post(f"/change-requests/{req.id}/apply")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == RequestStatus.APPLIED.value
