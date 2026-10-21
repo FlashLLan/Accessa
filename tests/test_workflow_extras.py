@@ -1,7 +1,9 @@
 import pytest
 
 from backend.models.audit_log import AuditLog
+from ai_review_helpers import PR_URL, FakeGitHub, FakeOpenAI, mocked_services
 from backend.models.enums import RequestStatus
+from backend.models.git_context import GitContext
 
 def test_creator_can_add_comment_to_request(client, db, create_user, create_role, login_user, seed_change_request):
     junior_role = create_role(db, "junior", level=1)
@@ -213,9 +215,11 @@ def test_update_to_high_risk_fails_with_ineligible_reviewer(client, db, create_u
 def test_ai_review_follows_assigned_reviewer_after_escalation(
     client, db, create_user, create_role, login_user, seed_change_request, method
 ):
-    # AI review uses the same access rule as Git context and comments: admin,
-    # creator or assigned reviewer. After an escalation the new reviewer gains
-    # access and the previous reviewer loses it.
+    # Reading the AI review uses the same access rule as Git context and comments
+    # (admin, creator or assigned reviewer); generating it is for the assigned
+    # reviewer only. After an escalation the new reviewer gains access and the
+    # previous reviewer loses it. Generating needs a linked PR; GitHub and OpenAI
+    # are mocked.
     junior = create_role(db, "junior", level=1)
     mid = create_role(db, "mid", level=2)
     senior = create_role(db, "senior", level=3)
@@ -228,9 +232,14 @@ def test_ai_review_follows_assigned_reviewer_after_escalation(
     login_user(previous)
     assert client.post(f"/change-requests/{req.id}/escalate", json={"target_reviewer_id": escalated_to.id}).status_code == 200
 
-    login_user(escalated_to)
-    assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 200
+    db.add(GitContext(change_request_id=req.id, pull_request_url=PR_URL))
+    db.commit()
+    github = FakeGitHub({"a.py": b"x = 1\n"}, [{"filename": "a.py", "status": "added", "patch": "+x = 1"}])
 
-    for user in (previous, outsider):
-        login_user(user)
-        assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 403
+    with mocked_services(github, FakeOpenAI()):
+        login_user(escalated_to)
+        assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 200
+
+        for user in (previous, outsider):
+            login_user(user)
+            assert client.request(method.upper(), f"/change-requests/{req.id}/ai-review").status_code == 403

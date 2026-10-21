@@ -96,6 +96,7 @@ class PullRequestSnapshot:
     head_ref: str | None
     files: list[ChangedFile] = field(default_factory=list)
     files_truncated: bool = False    # the PR has more than MAX_CHANGED_FILES files
+    changed_files_total: int = 0     # as reported by GitHub; may exceed len(files)
 
 
 # --- URL parsing ------------------------------------------------------------------------
@@ -247,7 +248,9 @@ class GitHubClient:
             "GET", f"{base}/pulls/{ref.number}/files", params={"per_page": MAX_CHANGED_FILES, "page": 1}
         ).json()
         changed_files = pr.get("changed_files")
-        truncated = (isinstance(changed_files, int) and changed_files > len(listed)) or len(listed) > MAX_CHANGED_FILES
+        if not isinstance(changed_files, int):
+            changed_files = len(listed)
+        truncated = changed_files > len(listed) or len(listed) > MAX_CHANGED_FILES
 
         files = []
         for item in listed[:MAX_CHANGED_FILES]:
@@ -275,7 +278,18 @@ class GitHubClient:
             head_ref=(pr.get("head") or {}).get("ref"),
             files=files,
             files_truncated=truncated,
+            changed_files_total=max(changed_files, len(listed)),
         )
+
+    def list_tree(self, owner: str, repo: str, ref: str) -> dict[str, int]:
+        """All files of the repository at commit `ref` as {path: size in bytes}.
+        GitHub cuts very large trees short; what it returned is used as is."""
+        tree = self._send("GET", f"/repos/{owner}/{repo}/git/trees/{ref}", params={"recursive": "1"}).json()
+        return {
+            item["path"]: item.get("size", 0)
+            for item in tree.get("tree", [])
+            if item.get("type") == "blob" and isinstance(item.get("path"), str)
+        }
 
 
 def fetch_pull_request(url: str) -> PullRequestSnapshot:

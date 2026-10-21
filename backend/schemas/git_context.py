@@ -2,6 +2,8 @@ import re
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from backend.services.secret_masking import mask_secrets
+
 _SECRET_PATTERNS = [
     "password=",
     "token=",
@@ -77,7 +79,10 @@ class GitContextCreate(BaseModel):
         v = v.strip()
         if len(v) > _TEXT_MAX:
             raise ValueError(f"Value too long (max {_TEXT_MAX} characters)")
-        return _reject_secrets(v)
+        # Diffs and file lists are code: hard-coded secret values are masked
+        # (replaced by [REDACTED]) instead of rejecting the whole text.
+        masked, _ = mask_secrets(v)
+        return masked
 
     def has_any_data(self) -> bool:
         return any(

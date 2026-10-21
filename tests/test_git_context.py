@@ -1,7 +1,7 @@
 """
 Tests for Git-linked context on change requests.
 Covers: creation with/without git_context, retrieval, validation, access control,
-secret rejection, and audit logging.
+secret masking, and audit logging.
 """
 import pytest
 from backend.models.git_context import GitContext
@@ -263,9 +263,9 @@ def test_git_context_not_required_for_any_request_type(client, db, create_user, 
         assert response.json()["git_context"] is None
 
 
-# ── 12. Obvious secret content is rejected ───────────────────────────────────
+# ── 12. Secret values in diff text / changed files are masked, not rejected ──
 
-def test_secret_content_in_diff_text_rejected(client, db, create_user, create_role, login_user):
+def test_secret_content_in_diff_text_masked(client, db, create_user, create_role, login_user):
     junior = create_role(db, "junior", level=1)
     senior = create_role(db, "senior", level=3)
     creator = create_user(db, role=junior, label="creator")
@@ -274,15 +274,16 @@ def test_secret_content_in_diff_text_rejected(client, db, create_user, create_ro
 
     payload = _base_payload(reviewer.id)
     payload["git_context"] = {
-        "diff_text": "Updated config with token=ghp_supersecretvalue and API changes.",
+        "diff_text": "Updated config with token=ghp_" + "a" * 36 + " and API changes.",
     }
 
     response = client.post("/change-requests/", json=payload)
 
-    assert response.status_code == 422
+    assert response.status_code == 200, response.text
+    assert response.json()["git_context"]["diff_text"] == "Updated config with token=[REDACTED] and API changes."
 
 
-def test_secret_content_in_changed_files_rejected(client, db, create_user, create_role, login_user):
+def test_secret_content_in_changed_files_masked(client, db, create_user, create_role, login_user):
     junior = create_role(db, "junior", level=1)
     senior = create_role(db, "senior", level=3)
     creator = create_user(db, role=junior, label="creator")
@@ -296,7 +297,8 @@ def test_secret_content_in_changed_files_rejected(client, db, create_user, creat
 
     response = client.post("/change-requests/", json=payload)
 
-    assert response.status_code == 422
+    assert response.status_code == 200, response.text
+    assert response.json()["git_context"]["changed_files_summary"] == "-----BEGIN RSA PRIVATE KEY-----\n[REDACTED]"
 
 
 # ── 13. Audit log is created for git context linking ─────────────────────────

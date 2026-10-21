@@ -123,8 +123,7 @@ def test_failed_audit_write_rolls_back_approval(client, db, app_db_engine, peopl
      "SELECT assigned_reviewer_id = {reviewer} FROM change_requests WHERE id = {id}", True),
     ("reviewer", "post", "/change-requests/{id}/git-context", {"branch_name": "x"}, "git_context",
      "SELECT count(*) FROM git_context", 0),
-    ("reviewer", "post", "/change-requests/{id}/ai-review", None, "ai_review",
-     "SELECT count(*) FROM ai_review_results", 0),
+    # AI review: covered in test_ai_review.py (needs GitHub and OpenAI mocked).
     ("admin", "patch", "/users/{creator}/deactivate", None, "users",
      "SELECT is_active FROM users WHERE id = {creator}", True),
 ])

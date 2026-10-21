@@ -4,9 +4,10 @@
 
 Every record is created the way a real user would create it (sign-up, admin
 creates users, login, forced password change, create/submit/approve/reject/
-escalate/delegate/apply, comments, Git context, AI review), so it passes the
+escalate/delegate/apply, comments, Git context), so it passes the
 current validation, permission and approval rules and produces its own audit
-entries. Nothing is written to the database directly.
+entries. Nothing is written to the database directly. No AI review is generated:
+that needs OPENAI_API_KEY and a real public pull request.
 
 Passwords are never hard-coded: every demo user gets the password from the
 DEMO_PASSWORD setting (environment or .env; the API requires >= 8 characters).
@@ -191,7 +192,6 @@ def main() -> None:
     act("junior@test.com", r4, "submit")
     act("senior@test.com", r4, "delegate", {"target_reviewer_id": ids["senior2@test.com"],
                                             "comment": "Sofia owns the API cluster."})
-    act("senior2@test.com", r4, "ai-review")
     act("senior2@test.com", r4, "approve", {"decision_comment": "Capacity checked."})
     act("junior@test.com", r4, "apply")
 
