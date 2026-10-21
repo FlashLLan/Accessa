@@ -268,7 +268,7 @@ export default function AuditLogPage() {
                       style={{ cursor: hasExtra ? "pointer" : "default" }}
                       onClick={() => hasExtra && toggleExpand(log.id)}
                     >
-                      <td style={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      <td style={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "var(--text-soft)" }}>
                         {formatDateTime(log.created_at)}
                       </td>
 
@@ -284,11 +284,11 @@ export default function AuditLogPage() {
                             {/* The e-mail comes from the linked user record in the API
                                 response; audit rows never store e-mail addresses. */}
                             {log.user?.email && (
-                              <div style={{ marginTop: 3, fontSize: "0.75rem", color: "var(--text-muted)", overflowWrap: "anywhere" }}>
+                              <div style={{ marginTop: 3, fontSize: "0.75rem", color: "var(--text-soft)", overflowWrap: "anywhere" }}>
                                 {log.user.email}
                               </div>
                             )}
-                            <div style={{ marginTop: 3, fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            <div style={{ marginTop: 3, fontSize: "0.75rem", color: "var(--text-soft)" }}>
                               {formatRole(role)}
                             </div>
                           </div>
@@ -301,7 +301,7 @@ export default function AuditLogPage() {
 
                       <td style={{ fontSize: "0.85rem" }}>
                         {log.entity_type !== "workspace" && log.entity_type !== "audit_log" && (
-                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-soft)" }}>
                             {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
                           </div>
                         )}
@@ -313,7 +313,7 @@ export default function AuditLogPage() {
                       <td style={{ fontSize: "0.85rem", maxWidth: 360 }}>
                         {log.details ?? "—"}
                         {hasExtra && (
-                          <span style={{ marginLeft: 6, fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                          <span style={{ marginLeft: 6, fontSize: "0.75rem", color: "var(--text-soft)" }}>
                             {isExpanded ? "▲ less" : "▼ more"}
                           </span>
                         )}
