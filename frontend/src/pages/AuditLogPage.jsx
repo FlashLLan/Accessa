@@ -247,7 +247,7 @@ export default function AuditLogPage() {
             <thead>
               <tr>
                 <th>Timestamp</th>
-                <th>User</th>
+                <th style={{ minWidth: 260 }}>User</th>
                 <th>Action</th>
                 <th>Entity</th>
                 <th>Details</th>
@@ -277,12 +277,14 @@ export default function AuditLogPage() {
                           <div className="user-avatar" style={{ width: 28, height: 28, fontSize: "0.75rem" }}>
                             {(log.user?.full_name ?? "?").charAt(0).toUpperCase()}
                           </div>
-                          <div>
-                            <div style={{ fontSize: "0.85rem", fontWeight: 500 }} title={log.user?.email ?? ""}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: "0.85rem", fontWeight: 500 }}>
                               {log.user?.full_name ?? "Unknown user"}
                             </div>
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                              {formatRole(role)}
+                            {/* The e-mail comes from the linked user record in the API
+                                response; audit rows never store e-mail addresses. */}
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", overflowWrap: "anywhere" }}>
+                              {[log.user?.email, role ? formatRole(role) : null].filter(Boolean).join(" · ") || "—"}
                             </div>
                           </div>
                         </div>
