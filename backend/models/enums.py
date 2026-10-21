@@ -52,7 +52,7 @@ class ReviewActionType(str, enum.Enum):
 
 
 class AIReviewScope(str, enum.Enum):
-    # What the AI review reads besides the request: the PR's changed files only,
-    # or also the files they import / are imported by and top-level config files.
+    # Chosen by the reviewer for each AI review: the PR's changed files only, or
+    # also the files they import / are imported by and top-level config files.
     CHANGED_FILES = "changed_files"
     EXTENDED = "extended"
