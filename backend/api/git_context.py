@@ -52,14 +52,14 @@ def upsert_git_context(
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(cr.git_context, field, value)
         git_ctx = cr.git_context
-        audit_action = "git_context_updated"
+        audit_action = "GIT_CONTEXT_UPDATED"
     else:
         git_ctx = GitContext(
             change_request_id=request_id,
             **payload.model_dump(),
         )
         db.add(git_ctx)
-        audit_action = "git_context_linked"
+        audit_action = "GIT_CONTEXT_LINKED"
 
     log_action(
         db=db,
@@ -71,7 +71,7 @@ def upsert_git_context(
         entity_id=request_id,
         request_id=request_id,
         details=(
-            f"Git context {'updated' if audit_action == 'git_context_updated' else 'linked'}: "
+            f"Git context {'updated' if audit_action == 'GIT_CONTEXT_UPDATED' else 'linked'}: "
             f"repo={payload.repository_url or '-'}, "
             f"branch={payload.branch_name or '-'}, "
             f"commit={payload.commit_hash or '-'}"

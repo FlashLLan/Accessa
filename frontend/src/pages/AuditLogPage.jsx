@@ -3,10 +3,14 @@ import Toast from "../components/common/Toast";
 import { extractApiError } from "../utils/apiError";
 import { getAuditLogs } from "../api/auditLogs";
 import { parseUtcDate } from "../utils/requestPresentation";
+import { Link } from "react-router-dom";
 
+// Audit action codes written by the backend today. Filters are built from these
+// fixed lists, not from whatever values happen to be in the data.
 const ACTION_LABELS = {
   LOGIN_SUCCESS: "Login",
   LOGIN_FAILED: "Failed Login",
+  WORKSPACE_CREATED: "Workspace Created",
   USER_CREATED: "User Created",
   USER_DEACTIVATED: "User Deactivated",
   USER_REACTIVATED: "User Reactivated",
@@ -24,46 +28,31 @@ const ACTION_LABELS = {
   REQUEST_APPLIED: "Request Applied",
   COMMENT_CREATED: "Comment Created",
   GIT_CONTEXT_LINKED: "Git Context Linked",
+  GIT_CONTEXT_UPDATED: "Git Context Updated",
   AI_REVIEW_GENERATED: "AI Review Generated",
   AUDIT_VIEWED: "Audit Log Viewed",
-  // legacy names still present in existing DB rows
-  login: "Login",
-  failed_login: "Failed Login",
-  register: "User Created",
-  create_user: "User Created",
-  deactivate_user: "User Deactivated",
-  reactivate_user: "User Reactivated",
-  update_user_role: "Role Changed",
-  profile_updated: "Profile Updated",
-  password_changed: "Password Changed",
-  create_change_request: "Request Created",
-  submit_change_request: "Request Submitted",
-  update_change_request: "Request Updated",
-  approve_change_request: "Request Approved",
-  reject_change_request: "Request Rejected",
-  escalate_change_request: "Request Escalated",
-  delegate_change_request: "Request Delegated",
-  apply_change_request: "Request Applied",
-  add_comment: "Comment Created",
-  git_context_linked: "Git Context Linked",
-  trigger_ai_review: "AI Review Generated",
 };
+
+const ACTION_FILTER_OPTIONS = Object.keys(ACTION_LABELS);
 
 const ENTITY_LABELS = {
   user: "User",
   change_request: "Change Request",
-  git_context: "Git Context",
-  ai_review: "AI Review",
   audit_log: "Audit Log",
+  workspace: "Workspace",
 };
 
+// Workspace is deliberately not offered: every entry already belongs to the
+// current workspace.
+const ENTITY_FILTER_OPTIONS = ["user", "change_request", "audit_log"];
+
 const ACTION_CATEGORIES = {
-  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED", "login", "failed_login", "register"],
-  user_management: ["USER_CREATED", "USER_DEACTIVATED", "USER_REACTIVATED", "ROLE_ASSIGNED", "ROLE_CHANGED", "PROFILE_UPDATED", "PASSWORD_CHANGED", "create_user", "deactivate_user", "reactivate_user", "update_user_role", "profile_updated", "password_changed"],
-  change_requests: ["REQUEST_CREATED", "REQUEST_SUBMITTED", "REQUEST_UPDATED", "REQUEST_APPROVED", "REQUEST_REJECTED", "REQUEST_ESCALATED", "REQUEST_DELEGATED", "REQUEST_APPLIED", "COMMENT_CREATED", "create_change_request", "submit_change_request", "update_change_request", "approve_change_request", "reject_change_request", "escalate_change_request", "delegate_change_request", "apply_change_request", "add_comment"],
-  git: ["GIT_CONTEXT_LINKED", "git_context_linked"],
-  ai: ["AI_REVIEW_GENERATED", "trigger_ai_review"],
-  admin: ["AUDIT_VIEWED"],
+  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED"],
+  user_management: ["USER_CREATED", "USER_DEACTIVATED", "USER_REACTIVATED", "ROLE_ASSIGNED", "ROLE_CHANGED", "PROFILE_UPDATED", "PASSWORD_CHANGED"],
+  change_requests: ["REQUEST_CREATED", "REQUEST_SUBMITTED", "REQUEST_UPDATED", "REQUEST_APPROVED", "REQUEST_REJECTED", "REQUEST_ESCALATED", "REQUEST_DELEGATED", "REQUEST_APPLIED", "COMMENT_CREATED"],
+  git: ["GIT_CONTEXT_LINKED", "GIT_CONTEXT_UPDATED"],
+  ai: ["AI_REVIEW_GENERATED"],
+  admin: ["AUDIT_VIEWED", "WORKSPACE_CREATED"],
 };
 
 function getCategoryForAction(action) {
@@ -103,6 +92,34 @@ function ActionBadge({ action }) {
   );
 }
 
+function formatRole(role) {
+  return role ? role.charAt(0).toUpperCase() + role.slice(1) : "—";
+}
+
+// Readable reference for the entity; entity ids are never shown as text.
+// entity_label is resolved by the API within the current workspace.
+function EntityReference({ log }) {
+  const label = log.entity_label;
+  switch (log.entity_type) {
+    case "change_request":
+      return log.entity_id != null && label ? (
+        <Link to={`/requests/${log.entity_id}`} onClick={(e) => e.stopPropagation()}>
+          {label}
+        </Link>
+      ) : (
+        <span>{label ?? "Unknown request"}</span>
+      );
+    case "user":
+      return <span>{label ?? "Unknown user"}</span>;
+    case "workspace":
+      return <span>Workspace: {label ?? "—"}</span>;
+    case "audit_log":
+      return <span>Audit log</span>;
+    default:
+      return <span>{label ?? ENTITY_LABELS[log.entity_type] ?? log.entity_type}</span>;
+  }
+}
+
 export default function AuditLogPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,16 +146,6 @@ export default function AuditLogPage() {
     })();
   }, []);
 
-  const uniqueActions = useMemo(
-    () => [...new Set(logs.map((l) => l.action))].sort(),
-    [logs]
-  );
-
-  const uniqueEntities = useMemo(
-    () => [...new Set(logs.map((l) => l.entity_type))].sort(),
-    [logs]
-  );
-
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return logs.filter((log) => {
@@ -147,12 +154,15 @@ export default function AuditLogPage() {
       if (term) {
         const haystack = [
           log.action,
+          ACTION_LABELS[log.action] ?? "",
           log.entity_type,
-          String(log.entity_id),
+          log.entity_label ?? "",
           log.details ?? "",
           log.user?.full_name ?? "",
           log.user?.email ?? "",
+          log.actor_role ?? "",
           log.severity ?? "",
+          log.ip_address ?? "",
         ]
           .join(" ")
           .toLowerCase();
@@ -186,7 +196,7 @@ export default function AuditLogPage() {
         <div className="toolbar-search">
           <input
             type="text"
-            placeholder="Search by user, action, entity, or details"
+            placeholder="Search by user, role, action, entity, details or IP"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -196,18 +206,18 @@ export default function AuditLogPage() {
       <div className="toolbar-actions">
         <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
           <option value="all">All actions</option>
-          {uniqueActions.map((a) => (
+          {ACTION_FILTER_OPTIONS.map((a) => (
             <option key={a} value={a}>
-              {ACTION_LABELS[a] ?? a}
+              {ACTION_LABELS[a]}
             </option>
           ))}
         </select>
 
         <select value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)}>
           <option value="all">All entity types</option>
-          {uniqueEntities.map((e) => (
+          {ENTITY_FILTER_OPTIONS.map((e) => (
             <option key={e} value={e}>
-              {ENTITY_LABELS[e] ?? e}
+              {ENTITY_LABELS[e]}
             </option>
           ))}
         </select>
@@ -246,7 +256,11 @@ export default function AuditLogPage() {
             <tbody>
               {filtered.map((log) => {
                 const isExpanded = expandedId === log.id;
-                const hasExtra = log.old_value || log.new_value || log.severity;
+                const hasExtra =
+                  log.old_value || log.new_value || log.severity || log.ip_address || log.user_agent;
+                // Role at the time of the action; the user's current role only for
+                // older entries written before actor_role existed.
+                const role = log.actor_role || log.user?.role?.name;
                 return (
                   <>
                     <tr
@@ -264,11 +278,11 @@ export default function AuditLogPage() {
                             {(log.user?.full_name ?? "?").charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontSize: "0.85rem", fontWeight: 500 }}>
-                              {log.user?.full_name ?? "—"}
+                            <div style={{ fontSize: "0.85rem", fontWeight: 500 }} title={log.user?.email ?? ""}>
+                              {log.user?.full_name ?? "Unknown user"}
                             </div>
                             <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                              {log.user?.email ?? ""}
+                              {formatRole(role)}
                             </div>
                           </div>
                         </div>
@@ -279,12 +293,14 @@ export default function AuditLogPage() {
                       </td>
 
                       <td style={{ fontSize: "0.85rem" }}>
-                        <span style={{ fontWeight: 500 }}>
-                          {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
-                        </span>
-                        <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
-                          #{log.entity_id}
-                        </span>
+                        {log.entity_type !== "workspace" && log.entity_type !== "audit_log" && (
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                          </div>
+                        )}
+                        <div style={{ fontWeight: 500 }}>
+                          <EntityReference log={log} />
+                        </div>
                       </td>
 
                       <td style={{ fontSize: "0.85rem", maxWidth: 360 }}>
@@ -300,11 +316,19 @@ export default function AuditLogPage() {
                     {isExpanded && hasExtra && (
                       <tr key={`${log.id}-extra`} style={{ background: "rgba(139, 92, 246, 0.07)" }}>
                         <td colSpan={5} style={{ padding: "10px 18px", fontSize: "0.8rem", color: "var(--text-soft)" }}>
-                          {log.severity && (
-                            <div style={{ marginBottom: 4 }}>
-                              <strong style={{ color: "var(--text)" }}>Severity:</strong> {log.severity}
-                            </div>
-                          )}
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 24px", marginBottom: 4 }}>
+                            {log.severity && (
+                              <span>
+                                <strong style={{ color: "var(--text)" }}>Severity:</strong> {log.severity}
+                              </span>
+                            )}
+                            <span>
+                              <strong style={{ color: "var(--text)" }}>IP address:</strong> {log.ip_address ?? "—"}
+                            </span>
+                            <span style={{ overflowWrap: "anywhere" }}>
+                              <strong style={{ color: "var(--text)" }}>User agent:</strong> {log.user_agent ?? "—"}
+                            </span>
+                          </div>
                           {log.old_value && (
                             <div style={{ marginBottom: 4 }}>
                               <strong style={{ color: "var(--text)" }}>Previous value:</strong>{" "}

@@ -79,9 +79,14 @@ def login(
             workspace_id=workspace.id,
             action="LOGIN_FAILED",
             entity_type="user" if user else "workspace",
-            entity_id=user.id if user else workspace.id,
+            # Workspace events never carry the internal workspace id.
+            entity_id=user.id if user else None,
             severity="medium",
-            details=f"Failed login for '{data.email}' ({reason})",
+            details=(
+                f"Failed login ({reason})"
+                if user
+                else f"Failed login: unknown email (workspace '{workspace.slug}')"
+            ),
         )
         db.commit()
         raise invalid
@@ -98,7 +103,7 @@ def login(
         entity_type="user",
         entity_id=user.id,
         severity="low",
-        details=f"User '{user.email}' logged in",
+        details="User logged in",
     )
     db.commit()
 
@@ -169,9 +174,9 @@ def signup_workspace(
             workspace_id=workspace.id,
             action="WORKSPACE_CREATED",
             entity_type="workspace",
-            entity_id=workspace.id,
+            entity_id=None,
             severity="high",
-            details=f"Workspace '{workspace.name}' ({workspace.slug}) created by '{admin_user.email}'",
+            details=f"Workspace created: slug '{workspace.slug}', public_id {workspace.public_id}",
         )
         log_action(
             db=db,
@@ -183,7 +188,7 @@ def signup_workspace(
             entity_type="user",
             entity_id=admin_user.id,
             severity="medium",
-            details=f"Admin '{admin_user.email}' created with the workspace",
+            details="Workspace admin created at sign-up",
         )
         db.commit()
     except IntegrityError:

@@ -9,7 +9,7 @@ def log_action(
     user_id: int | None,
     action: str,
     entity_type: str,
-    entity_id: int,
+    entity_id: int | None,
     details: str | None = None,
     request_id: int | None = None,
     severity: str | None = None,
@@ -24,14 +24,17 @@ def log_action(
     are stored or neither is."""
     # Every audit entry belongs to the actor's workspace so one workspace can never read another's trail.
     # user_id may be None (failed login for an unknown email); workspace_id must then be given.
+    actor = db.get(User, user_id) if user_id is not None else None
     if workspace_id is None:
-        if user_id is None:
+        if actor is None:
             raise ValueError("log_action needs workspace_id when user_id is None")
-        workspace_id = db.get(User, user_id).workspace_id
+        workspace_id = actor.workspace_id
 
     log_entry = AuditLog(
         user_id=user_id,
         workspace_id=workspace_id,
+        # Snapshot of the actor's role now; a later role change must not rewrite history.
+        actor_role=actor.role.name if actor is not None else None,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,

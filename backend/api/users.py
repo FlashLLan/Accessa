@@ -136,7 +136,6 @@ def update_me(
     if existing:
         raise HTTPException(status_code=400, detail="This name is already taken by another user.")
 
-    old_name = current_user.full_name
     current_user.full_name = full_name
     current_user.updated_at = utc_now()
     db.flush()  # assign ids; committed together with the audit entry below
@@ -150,9 +149,8 @@ def update_me(
         entity_type="user",
         entity_id=current_user.id,
         severity="low",
-        details="Updated full_name",
-        old_value=old_name,
-        new_value=current_user.full_name,
+        # Names are not stored in the audit log; only the fact of the change.
+        details="Updated full name",
     )
     db.commit()
 
@@ -395,7 +393,7 @@ def create_user(
         entity_type="user",
         entity_id=new_user.id,
         severity="medium",
-        details=f"Created user '{new_user.email}'"
+        details=f"Created user with role '{role.name}'"
     )
     log_action(
         db=db,
@@ -406,7 +404,8 @@ def create_user(
         entity_type="user",
         entity_id=new_user.id,
         severity="medium",
-        details=f"Assigned role '{new_user.role_id}' to '{new_user.email}'"
+        details=f"Assigned role '{role.name}'",
+        new_value=role.name
     )
     db.commit()
 
@@ -444,7 +443,7 @@ def deactivate_user(
         entity_type="user",
         entity_id=user.id,
         severity="high",
-        details=f"Deactivated user '{user.email}'"
+        details="User deactivated"
     )
     db.commit()
 
@@ -480,7 +479,7 @@ def reactivate_user(
         entity_type="user",
         entity_id=user.id,
         severity="high",
-        details=f"Reactivated user '{user.email}'"
+        details="User reactivated"
     )
     db.commit()
 
@@ -524,7 +523,9 @@ def update_user_role(
         entity_type="user",
         entity_id=user.id,
         severity="high",
-        details=f"Changed role for '{user.email}' from '{old_role_name}' to '{new_role.name}'"
+        details=f"Role changed from '{old_role_name}' to '{new_role.name}'",
+        old_value=old_role_name,
+        new_value=new_role.name
     )
     db.commit()
 

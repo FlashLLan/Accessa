@@ -471,7 +471,9 @@ def add_comment_to_request(
         entity_type="change_request",
         entity_id=request_id,
         severity="low",
-        details=comment_data.comment_text
+        # The comment itself stays in the comments table; free text may contain
+        # names or e-mail addresses, which the audit log never stores.
+        details=f"Comment id={new_comment.id} added"
     )
     db.commit()
 
