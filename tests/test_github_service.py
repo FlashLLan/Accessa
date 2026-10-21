@@ -207,6 +207,15 @@ def test_private_or_missing_repository_gives_clear_error():
     assert "private" in exc.value.message and "public" in exc.value.message
 
 
+def test_forbidden_without_rate_limit_does_not_say_private():
+    response = httpx.Response(403, headers={"x-ratelimit-remaining": "42"}, json={"message": "Forbidden"})
+    with pytest.raises(GitHubUnavailable) as exc:
+        _client(FakeGitHub(error=_fail_pr(response))).fetch_pull_request(PR_URL)
+    assert exc.value.status_code == 502
+    assert exc.value.message == "GitHub refused the request (403). Try again later."
+    assert "private" not in exc.value.message
+
+
 def test_primary_rate_limit_reports_reset_time():
     response = httpx.Response(403, headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1767225600"},
                               json={"message": "API rate limit exceeded"})

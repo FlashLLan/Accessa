@@ -180,7 +180,10 @@ class GitHubClient:
             raise GitHubRateLimited(self._rate_limit_message(response))
         if status == 401:
             raise GitHubUnavailable("GitHub rejected the configured GITHUB_TOKEN.")
-        if status in (403, 404):
+        if status == 403:
+            # Not a rate limit (checked above). Private repositories answer 404, not 403.
+            raise GitHubUnavailable("GitHub refused the request (403). Try again later.")
+        if status == 404:
             # GitHub answers 404 for private repositories it does not show to us.
             raise GitHubNotFound(
                 "Repository or pull request not found, or the repository is private. "
