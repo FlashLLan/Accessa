@@ -283,8 +283,13 @@ export default function AuditLogPage() {
                             </div>
                             {/* The e-mail comes from the linked user record in the API
                                 response; audit rows never store e-mail addresses. */}
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", overflowWrap: "anywhere" }}>
-                              {[log.user?.email, role ? formatRole(role) : null].filter(Boolean).join(" · ") || "—"}
+                            {log.user?.email && (
+                              <div style={{ marginTop: 3, fontSize: "0.75rem", color: "var(--text-muted)", overflowWrap: "anywhere" }}>
+                                {log.user.email}
+                              </div>
+                            )}
+                            <div style={{ marginTop: 3, fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                              {formatRole(role)}
                             </div>
                           </div>
                         </div>
