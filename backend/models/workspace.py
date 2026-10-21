@@ -1,10 +1,11 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, Integer, String, Uuid, func
+from sqlalchemy import Column, DateTime, Enum, Integer, String, Uuid, func
 from sqlalchemy.orm import relationship
 
 from database.base import Base
 from backend.core.timeutils import utc_now
+from backend.models.enums import AIReviewScope
 
 SLUG_MIN_LENGTH = 3
 SLUG_MAX_LENGTH = 32
@@ -25,5 +26,12 @@ class Workspace(Base):
     slug = Column(String(SLUG_MAX_LENGTH), unique=True, nullable=False)
     name = Column(String(120), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
+    # Workspace setting, changed by an admin (FR-23).
+    ai_review_scope = Column(
+        Enum(AIReviewScope, name="ai_review_scope", native_enum=False, create_constraint=True, length=13),
+        nullable=False,
+        default=AIReviewScope.CHANGED_FILES,
+        server_default=AIReviewScope.CHANGED_FILES.name,
+    )
 
     users = relationship("User", back_populates="workspace")

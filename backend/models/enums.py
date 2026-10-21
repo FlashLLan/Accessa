@@ -49,3 +49,10 @@ class ReviewActionType(str, enum.Enum):
     # approvals and comments have their own tables.
     DELEGATE = "delegate"
     ESCALATE = "escalate"
+
+
+class AIReviewScope(str, enum.Enum):
+    # What the AI review reads besides the request: the PR's changed files only,
+    # or also the files they import / are imported by and top-level config files.
+    CHANGED_FILES = "changed_files"
+    EXTENDED = "extended"

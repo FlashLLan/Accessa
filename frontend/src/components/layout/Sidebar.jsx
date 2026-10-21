@@ -38,6 +38,11 @@ export default function Sidebar() {
       label: "Audit Log",
       roles: ["admin"],
     },
+    {
+      to: "/admin/settings",
+      label: "Settings",
+      roles: ["admin"],
+    },
   ];
 
   const visibleItems = navItems.filter((item) => item.roles.includes(role));
