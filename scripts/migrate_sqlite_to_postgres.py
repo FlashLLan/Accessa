@@ -20,6 +20,10 @@ What it does, in a single transaction:
 
 Refuses to run if the target already contains data. Seed scripts must therefore
 run *after* this script (they skip anything that already exists).
+
+--skip-audit-logs leaves out the legacy audit rows, which store names/e-mails
+and pre-workspace action codes, so the restored database starts with a clean,
+empty audit log.
 """
 import argparse
 import sqlite3
@@ -113,6 +117,12 @@ def fail(message: str):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sqlite", default=str(ROOT / "accessa.db"), help="path to the legacy SQLite file")
+    parser.add_argument(
+        "--skip-audit-logs",
+        action="store_true",
+        help="do not copy the legacy audit rows (they contain names/e-mails and legacy action codes); "
+             "the audit log starts empty",
+    )
     args = parser.parse_args()
 
     load_dotenv(ROOT / ".env")
@@ -165,8 +175,11 @@ def main():
         print(f"Created workspace '{DEFAULT_WORKSPACE_NAME}' (slug '{DEFAULT_WORKSPACE_SLUG}', id {workspace_id})\n")
 
         # --- copy tables -----------------------------------------------------
+        copied_tables = [t for t in TABLE_ORDER if not (args.skip_audit_logs and t == "audit_logs")]
+        if args.skip_audit_logs:
+            print("  audit_logs: skipped (--skip-audit-logs); the audit log starts empty")
         source_counts = {}
-        for name in TABLE_ORDER:
+        for name in copied_tables:
             table = tables[name]
             src_rows = [adapt_legacy_row(name, dict(r)) for r in src.execute(f'SELECT * FROM "{name}" ORDER BY id')]
             source_counts[name] = len(src_rows)
@@ -208,11 +221,14 @@ def main():
         # --- verification ------------------------------------------------------
         print(f"\n{'table':<20}{'sqlite':>8}{'postgres':>10}")
         mismatch = False
-        for name in TABLE_ORDER:
+        for name in copied_tables:
             target_count = conn.execute(select(func.count()).select_from(tables[name])).scalar_one()
             flag = "" if target_count == source_counts[name] else "   <-- MISMATCH"
             mismatch |= bool(flag)
             print(f"{name:<20}{source_counts[name]:>8}{target_count:>10}{flag}")
+        if args.skip_audit_logs:
+            audit_count = conn.execute(select(func.count()).select_from(tables["audit_logs"])).scalar_one()
+            print(f"{'audit_logs':<20}{'skipped':>8}{audit_count:>10}")
         ws_count = conn.execute(select(func.count()).select_from(tables["workspaces"])).scalar_one()
         print(f"{'workspaces':<20}{'-':>8}{ws_count:>10}   (new)")
 

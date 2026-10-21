@@ -2,6 +2,7 @@
 
     python scripts/reset_local_dev_db.py            # asks you to type the database name
     python scripts/reset_local_dev_db.py --yes      # no prompt
+    python scripts/reset_local_dev_db.py --no-seed  # migrate only, leave it empty
 
 ALL DATA in the database named by DATABASE_URL is destroyed, including the
 append-only audit log (dropping the database is the only way to clear it).
@@ -37,6 +38,12 @@ def fail(message: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+    parser.add_argument(
+        "--no-seed",
+        action="store_true",
+        help="leave the database empty after migrating (e.g. to restore old data with "
+             "scripts/migrate_sqlite_to_postgres.py, which needs an empty database)",
+    )
     args = parser.parse_args()
 
     load_dotenv(ROOT / ".env")  # explicitly set environment variables take precedence
@@ -92,15 +99,20 @@ def main() -> None:
     owner.dispose()
 
     # --- schema and seed data ----------------------------------------------------
-    for step in (
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        [sys.executable, "-m", "backend.core.seed_roles"],
-        [sys.executable, "-m", "backend.core.seed_admin"],
-    ):
+    steps = [[sys.executable, "-m", "alembic", "upgrade", "head"]]
+    if not args.no_seed:
+        steps += [
+            [sys.executable, "-m", "backend.core.seed_roles"],
+            [sys.executable, "-m", "backend.core.seed_admin"],
+        ]
+    for step in steps:
         print("$", " ".join(step[1:]))
         subprocess.run(step, cwd=ROOT, check=True)
 
-    print(f"\nDone. Log in at /w/default as admin@test.com (password from backend/core/seed_admin.py).")
+    if args.no_seed:
+        print("\nDone. The database is migrated and empty (no seed data).")
+    else:
+        print("\nDone. Log in at /w/default as admin@test.com (password from backend/core/seed_admin.py).")
 
 
 if __name__ == "__main__":
