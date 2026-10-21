@@ -76,3 +76,13 @@ export async function getReviewActions(id) {
   const response = await client.get(`/change-requests/${id}/review-actions`);
   return response.data;
 }
+export async function getAiReviews(id) {
+  const response = await client.get(`/change-requests/${id}/ai-review`);
+  return response.data;
+}
+
+// scope: "changed_files" (default) or "extended", chosen by the reviewer.
+export async function generateAiReview(id, scope = "changed_files") {
+  const response = await client.post(`/change-requests/${id}/ai-review`, { scope });
+  return response.data;
+}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Toast from "../components/common/Toast";
+import AiReviewSection from "../components/requests/AiReviewSection";
+import DiffView from "../components/requests/DiffView";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users.js";
 import { useAuth } from "../hooks/useAuth";
@@ -122,7 +124,7 @@ function GitContextCard({ git }) {
       {git.diff_text && (
         <div>
           <span className="detail-label">Diff / change summary</span>
-          <pre className="git-pre">{git.diff_text}</pre>
+          <DiffView text={git.diff_text} />
         </div>
       )}
     </div>
@@ -403,6 +405,8 @@ const canTransfer = canEscalate || canDelegate;
       </div>
 
       <GitContextCard git={request.git_context} />
+
+      <AiReviewSection request={request} user={user} onError={setToastError} />
 
       <div className="details-section">
         <h3 className="details-section-title">Target Information</h3>

@@ -1362,3 +1362,135 @@
   letter-spacing: 0.08em;
   color: var(--text-soft);
 }
+
+
+/* ── Diff view (FR-22) ────────────────────────────────────────── */
+
+.diff-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.diff-file {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.diff-file-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
+  color: var(--heading);
+  overflow-wrap: anywhere;
+}
+
+.diff-file-stats {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.diff-stat-add { color: #4ade80; }
+.diff-stat-del { color: #f87171; }
+
+.diff-lines {
+  margin: 0;
+  padding: 6px 0;
+  background: rgba(0, 0, 0, 0.25);
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 12px;
+  color: var(--text);
+  max-height: 420px;
+  overflow: auto;
+}
+
+.diff-line {
+  padding: 0 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-add {
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+}
+
+.diff-del {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+.diff-hunk {
+  color: var(--accent-2);
+}
+
+.diff-meta {
+  color: var(--text-soft);
+}
+
+/* ── AI review ────────────────────────────────────────────────── */
+
+.ai-review-warning {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  font-size: 13px;
+}
+
+.ai-review-block {
+  margin: 16px 0;
+}
+
+.ai-review-summary {
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.ai-review-list,
+.ai-review-files {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.ai-review-files {
+  margin-top: 10px;
+}
+
+.ai-review-file-note {
+  display: inline;
+  margin-left: 8px;
+}
+
+.ai-review-risk-differs {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.ai-review-footer {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.ai-review-footer summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+/* "Regenerate" below an existing result is set apart from it. */
+.ai-review-generate-below {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
