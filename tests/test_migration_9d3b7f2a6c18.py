@@ -1,4 +1,5 @@
-"""Migration 9d3b7f2a6c18 adds what an AI review was based on; existing results keep defaults."""
+"""Migrations 9d3b7f2a6c18 (what an AI review was based on) and 4e6a1c8b5d27
+(generated_by_role): existing results keep NULL / defaults."""
 from pathlib import Path
 
 import pytest
@@ -25,12 +26,12 @@ def test_existing_results_get_defaults_and_scope_is_checked(db, owner_db_engine)
                 "VALUES (1, 1, 't', 'd', 'ACCESS_CHANGE', 's', 'DEV', 'LOW', 'PENDING_REVIEW', 1, 1)"))
             conn.execute(text("INSERT INTO ai_review_results (change_request_id, summary, model_name) "
                               "VALUES (1, 'stub', 'stub')"))
-        command.upgrade(config, "9d3b7f2a6c18")
+        command.upgrade(config, "4e6a1c8b5d27")
         with owner_db_engine.connect() as conn:
             row = conn.execute(text(
                 "SELECT reviewed_commit, review_scope, files_reviewed, files_skipped, changed_files_total, "
-                "input_truncated, secrets_masked FROM ai_review_results")).one()
-        assert tuple(row) == (None, None, None, None, None, False, 0)
+                "input_truncated, secrets_masked, generated_by_role FROM ai_review_results")).one()
+        assert tuple(row) == (None, None, None, None, None, False, 0, None)
 
         with pytest.raises(IntegrityError):
             with owner_db_engine.begin() as conn:

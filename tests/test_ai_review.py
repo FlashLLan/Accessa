@@ -428,6 +428,27 @@ def test_result_is_readable_by_anyone_who_can_open_the_request(client, db, peopl
     assert client.get(f"/change-requests/{pending.id}/ai-review").status_code == 403
 
 
+def test_result_keeps_the_generating_reviewers_role(client, db, people, pending, login_user):
+    login_user(people["reviewer"])
+    with mocked_services(_github(), FakeOpenAI()):
+        assert _generate(client, pending).json()["generated_by_role"] == "mid"
+
+    # The reviewer escalates and is later promoted: the result still says "mid".
+    assert client.post(f"/change-requests/{pending.id}/escalate",
+                       json={"target_reviewer_id": people["lead"].id}).status_code == 200
+    login_user(people["admin"])
+    assert client.patch(f"/users/{people['reviewer'].id}/role",
+                        json={"role_id": people["roles"]["senior"].id}).status_code == 200
+
+    login_user(people["lead"])  # the new assigned reviewer reads it
+    [result] = client.get(f"/change-requests/{pending.id}/ai-review").json()
+    assert result["generated_by_role"] == "mid"
+    saved = db.query(AIReviewResult).one()
+    assert saved.generated_by_role == "mid"
+    for user in (people["reviewer"], people["creator"]):
+        assert user.full_name not in str(vars(saved)) and user.email not in str(vars(saved))
+
+
 def test_latest_result_comes_first(client, db, people, pending, login_user):
     login_user(people["reviewer"])
     with mocked_services(_github(), FakeOpenAI()):

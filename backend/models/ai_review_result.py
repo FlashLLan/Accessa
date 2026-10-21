@@ -35,5 +35,7 @@ class AIReviewResult(Base):
     changed_files_total = Column(Integer, nullable=True)  # PR's changed files according to GitHub
     input_truncated = Column(Boolean, nullable=False, default=False, server_default="false")
     secrets_masked = Column(Integer, nullable=False, default=0, server_default="0")
+    # Role of the reviewer who generated it, at that moment (never a name or e-mail).
+    generated_by_role = Column(String, nullable=True)
 
     change_request = relationship("ChangeRequest", back_populates="ai_review_results")

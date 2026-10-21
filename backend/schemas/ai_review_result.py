@@ -38,6 +38,7 @@ class AIReviewResultResponse(BaseModel):
     changed_files_total: int | None = None
     input_truncated: bool = False
     secrets_masked: int = 0
+    generated_by_role: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

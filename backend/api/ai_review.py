@@ -123,6 +123,8 @@ def trigger_ai_review(
         changed_files_total=data.changed_files_total,
         input_truncated=data.input_truncated,
         secrets_masked=data.secrets_masked,
+        # Snapshot: stays "senior" after an escalation or a later role change.
+        generated_by_role=current_user.role.name,
     )
     db.add(result)
     db.flush()  # assign ids; committed together with the audit entry below
