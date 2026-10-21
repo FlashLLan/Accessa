@@ -5,6 +5,8 @@ from database.db import get_db
 from backend.models.user import User
 from backend.models.role import Role
 from backend.core.dependencies import (
+    ClientInfo,
+    get_client_info,
     get_current_user,
     get_current_workspace_id,
     can_create_role,
@@ -121,6 +123,7 @@ def update_me(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     full_name = payload.full_name.strip()
     if not full_name:
@@ -136,11 +139,12 @@ def update_me(
     old_name = current_user.full_name
     current_user.full_name = full_name
     current_user.updated_at = utc_now()
-    db.commit()
-    db.refresh(current_user)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="PROFILE_UPDATED",
         entity_type="user",
@@ -160,6 +164,7 @@ def change_my_password(
     payload: PasswordChangeRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    client: ClientInfo = Depends(get_client_info),
 ):
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect.")
@@ -176,10 +181,11 @@ def change_my_password(
     current_user.hashed_password = hash_password(payload.new_password)
     current_user.must_change_password = False
     current_user.updated_at = utc_now()
-    db.commit()
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="PASSWORD_CHANGED",
         entity_type="user",
@@ -329,6 +335,7 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     """The only way to add a user to an existing workspace.
 
@@ -377,11 +384,12 @@ def create_user(
     )
 
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="USER_CREATED",
         entity_type="user",
@@ -391,6 +399,8 @@ def create_user(
     )
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="ROLE_ASSIGNED",
         entity_type="user",
@@ -408,6 +418,7 @@ def deactivate_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can deactivate users")
@@ -422,11 +433,12 @@ def deactivate_user(
 
     user.is_active = False
     user.deactivated_at = utc_now()
-    db.commit()
-    db.refresh(user)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="USER_DEACTIVATED",
         entity_type="user",
@@ -445,6 +457,7 @@ def reactivate_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can reactivate users")
@@ -456,11 +469,12 @@ def reactivate_user(
 
     user.is_active = True
     user.deactivated_at = None
-    db.commit()
-    db.refresh(user)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="USER_REACTIVATED",
         entity_type="user",
@@ -479,6 +493,7 @@ def update_user_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can change user roles")
@@ -498,11 +513,12 @@ def update_user_role(
         raise HTTPException(status_code=400, detail="User already has this role")
 
     user.role_id = new_role.id
-    db.commit()
-    db.refresh(user)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="ROLE_CHANGED",
         entity_type="user",

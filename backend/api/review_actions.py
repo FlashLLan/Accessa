@@ -8,6 +8,8 @@ from backend.models.review_action import ReviewAction
 from backend.models.user import User
 from backend.models.enums import RequestStatus, ReviewActionType
 from backend.core.dependencies import (
+    ClientInfo,
+    get_client_info,
     get_current_user,
     get_current_workspace_id,
     get_request_or_404,
@@ -89,6 +91,7 @@ def escalate_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     cr = get_request_or_404(db, workspace_id, request_id)
 
@@ -134,11 +137,12 @@ def escalate_request(
         comment=payload.comment,
     )
     db.add(action)
-    db.commit()
-    db.refresh(action)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_ESCALATED",
         entity_type="change_request",
@@ -159,6 +163,7 @@ def delegate_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     cr = get_request_or_404(db, workspace_id, request_id)
 
@@ -210,11 +215,12 @@ def delegate_request(
         comment=payload.comment,
     )
     db.add(action)
-    db.commit()
-    db.refresh(action)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_DELEGATED",
         entity_type="change_request",

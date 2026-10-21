@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -13,6 +14,28 @@ from backend.models.workspace import Workspace
 from backend.core.security import SECRET_KEY, ALGORITHM
 
 security = HTTPBearer()
+
+USER_AGENT_MAX_LENGTH = 512
+
+
+@dataclass(frozen=True)
+class ClientInfo:
+    """Who sent the request, as recorded on every audit entry."""
+    ip_address: str | None
+    user_agent: str | None
+
+
+def get_client_info(request: Request) -> ClientInfo:
+    # request.client.host is the TCP peer address. Behind a reverse proxy or load
+    # balancer that is the proxy, not the user: the real client IP must then come
+    # from the header set by the *trusted* proxy (e.g. X-Forwarded-For / X-Real-IP,
+    # via uvicorn --proxy-headers --forwarded-allow-ips=<proxy ip>). Never take it
+    # from a header the client can set directly.
+    user_agent = request.headers.get("user-agent")
+    return ClientInfo(
+        ip_address=request.client.host if request.client else None,
+        user_agent=user_agent[:USER_AGENT_MAX_LENGTH] if user_agent else None,
+    )
 
 # Error code returned (403) while the account still has an initial password set by
 # an admin. The frontend detects it and redirects to the change-password page.

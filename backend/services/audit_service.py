@@ -19,6 +19,9 @@ def log_action(
     user_agent: str | None = None,
     workspace_id: int | None = None,
 ):
+    """Add an audit entry to the session. Never commits: the caller commits the
+    state change and its audit entry together in one db.commit(), so either both
+    are stored or neither is."""
     # Every audit entry belongs to the actor's workspace so one workspace can never read another's trail.
     # user_id may be None (failed login for an unknown email); workspace_id must then be given.
     if workspace_id is None:

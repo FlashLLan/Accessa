@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.change_request import ChangeRequest
 from backend.models.git_context import GitContext
-from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404
+from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404, ClientInfo, get_client_info
 from backend.models.user import User
 from backend.schemas.git_context import GitContextCreate, GitContextResponse
 from backend.services.audit_service import log_action
@@ -43,6 +43,7 @@ def upsert_git_context(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     cr = get_request_or_404(db, workspace_id, request_id)
     _check_access(cr, current_user)
@@ -50,8 +51,6 @@ def upsert_git_context(
     if cr.git_context:
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(cr.git_context, field, value)
-        db.commit()
-        db.refresh(cr.git_context)
         git_ctx = cr.git_context
         audit_action = "git_context_updated"
     else:
@@ -60,12 +59,12 @@ def upsert_git_context(
             **payload.model_dump(),
         )
         db.add(git_ctx)
-        db.commit()
-        db.refresh(git_ctx)
         audit_action = "git_context_linked"
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action=audit_action,
         entity_type="change_request",
@@ -78,6 +77,8 @@ def upsert_git_context(
             f"commit={payload.commit_hash or '-'}"
         ),
     )
+    # Git context and its audit entry are committed together.
     db.commit()
+    db.refresh(git_ctx)
 
     return git_ctx

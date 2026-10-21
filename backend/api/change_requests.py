@@ -15,6 +15,8 @@ from backend.schemas.change_request import (
     ApprovalHistoryResponse,
 )
 from backend.core.dependencies import (
+    ClientInfo,
+    get_client_info,
     get_current_user,
     get_current_workspace_id,
     scoped,
@@ -53,6 +55,7 @@ def create_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     reviewer = get_user_or_404(db, workspace_id, request_data.assigned_reviewer_id, detail="Assigned reviewer not found")
 
@@ -75,11 +78,12 @@ def create_change_request(
     )
 
     db.add(new_request)
-    db.commit()
-    db.refresh(new_request)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_CREATED",
         entity_type="change_request",
@@ -87,7 +91,6 @@ def create_change_request(
         severity="low",
         details=f"Created request '{new_request.title}' assigned to reviewer_id={new_request.assigned_reviewer_id}"
     )
-    db.commit()
 
     if request_data.git_context is not None and request_data.git_context.has_any_data():
         gc = request_data.git_context
@@ -96,9 +99,10 @@ def create_change_request(
             **gc.model_dump(),
         )
         db.add(git_ctx)
-        db.commit()
         log_action(
             db=db,
+            ip_address=client.ip_address,
+            user_agent=client.user_agent,
             user_id=current_user.id,
             action="GIT_CONTEXT_LINKED",
             entity_type="change_request",
@@ -112,9 +116,9 @@ def create_change_request(
                 f"commit={gc.commit_hash or '-'}"
             ),
         )
-        db.commit()
-        db.refresh(new_request)
 
+    db.commit()
+    db.refresh(new_request)
     return new_request
 
 
@@ -159,6 +163,7 @@ def approve_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
@@ -191,11 +196,12 @@ def approve_change_request(
 
     db.add(approval)
     change_request.status = RequestStatus.APPROVED
-    db.commit()
-    db.refresh(change_request)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_APPROVED",
         entity_type="change_request",
@@ -220,6 +226,7 @@ def reject_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
@@ -253,11 +260,12 @@ def reject_change_request(
     db.add(approval)
     change_request.status = RequestStatus.REJECTED
     change_request.closed_at = utc_now()
-    db.commit()
-    db.refresh(change_request)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_REJECTED",
         entity_type="change_request",
@@ -306,6 +314,7 @@ def update_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
@@ -344,11 +353,12 @@ def update_change_request(
     for field, value in update_data.items():
         setattr(change_request, field, value)
 
-    db.commit()
-    db.refresh(change_request)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_UPDATED",
         entity_type="change_request",
@@ -367,6 +377,7 @@ def submit_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
@@ -383,11 +394,12 @@ def submit_change_request(
 
     change_request.status = RequestStatus.PENDING_REVIEW
     change_request.submitted_at = utc_now()
-    db.commit()
-    db.refresh(change_request)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_SUBMITTED",
         entity_type="change_request",
@@ -430,6 +442,7 @@ def add_comment_to_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
@@ -447,11 +460,12 @@ def add_comment_to_request(
     )
 
     db.add(new_comment)
-    db.commit()
-    db.refresh(new_comment)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="COMMENT_CREATED",
         entity_type="change_request",
@@ -470,6 +484,7 @@ def apply_change_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     change_request = get_request_or_404(db, workspace_id, request_id)
 
@@ -487,11 +502,12 @@ def apply_change_request(
 
     change_request.status = RequestStatus.APPLIED
     change_request.closed_at = utc_now()
-    db.commit()
-    db.refresh(change_request)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="REQUEST_APPLIED",
         entity_type="change_request",

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.change_request import ChangeRequest
 from backend.models.ai_review_result import AIReviewResult
-from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404
+from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404, ClientInfo, get_client_info
 from backend.models.user import User
 from backend.schemas.ai_review_result import AIReviewResultResponse
 from backend.services.audit_service import log_action
@@ -45,6 +45,7 @@ def trigger_ai_review(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     """Stub: creates a placeholder AI review result. Replace with real AI call later."""
     cr = get_request_or_404(db, workspace_id, request_id)
@@ -64,11 +65,12 @@ def trigger_ai_review(
     )
 
     db.add(result)
-    db.commit()
-    db.refresh(result)
+    db.flush()  # assign ids; committed together with the audit entry below
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="AI_REVIEW_GENERATED",
         entity_type="change_request",

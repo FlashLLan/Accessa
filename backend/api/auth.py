@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from backend.core.limiter import limiter
+from backend.core.dependencies import ClientInfo, get_client_info
 from database.db import get_db
 from backend.models.user import User
 from backend.models.role import Role
@@ -27,13 +28,6 @@ INVALID_CREDENTIALS = "Invalid credentials"
 _DUMMY_PASSWORD_HASH = hash_password("accessa-dummy-password-for-timing")
 
 
-def _client_info(request: Request) -> dict:
-    return {
-        "ip_address": request.client.host if request.client else None,
-        "user_agent": request.headers.get("user-agent"),
-    }
-
-
 def _issue_token(user: User) -> str:
     # The workspace is identified by its public UUID; internal integer ids stay out of tokens.
     return create_access_token(data={"sub": str(user.id), "workspace": str(user.workspace.public_id)})
@@ -41,7 +35,12 @@ def _issue_token(user: User) -> str:
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
-def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    data: LoginRequest,
+    db: Session = Depends(get_db),
+    client: ClientInfo = Depends(get_client_info),
+):
     """Workspace-scoped login.
 
     Every failure (unknown workspace, unknown email, wrong password, inactive
@@ -74,6 +73,8 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
 
         log_action(
             db=db,
+            ip_address=client.ip_address,
+            user_agent=client.user_agent,
             user_id=user.id if user else None,
             workspace_id=workspace.id,
             action="LOGIN_FAILED",
@@ -81,7 +82,6 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
             entity_id=user.id if user else workspace.id,
             severity="medium",
             details=f"Failed login for '{data.email}' ({reason})",
-            **_client_info(request),
         )
         db.commit()
         raise invalid
@@ -90,6 +90,8 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=user.id,
         workspace_id=workspace.id,
         action="LOGIN_SUCCESS",
@@ -97,7 +99,6 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
         entity_id=user.id,
         severity="low",
         details=f"User '{user.email}' logged in",
-        **_client_info(request),
     )
     db.commit()
 
@@ -110,7 +111,12 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/signup", response_model=TokenResponse)
 @limiter.limit("5/minute")
-def signup_workspace(request: Request, data: WorkspaceSignupRequest, db: Session = Depends(get_db)):
+def signup_workspace(
+    request: Request,
+    data: WorkspaceSignupRequest,
+    db: Session = Depends(get_db),
+    client: ClientInfo = Depends(get_client_info),
+):
     """Register a new workspace. The person signing up becomes its first admin.
 
     This endpoint can only ever create a *new* workspace: it never adds a user to
@@ -157,6 +163,8 @@ def signup_workspace(request: Request, data: WorkspaceSignupRequest, db: Session
 
         log_action(
             db=db,
+            ip_address=client.ip_address,
+            user_agent=client.user_agent,
             user_id=admin_user.id,
             workspace_id=workspace.id,
             action="WORKSPACE_CREATED",
@@ -164,10 +172,11 @@ def signup_workspace(request: Request, data: WorkspaceSignupRequest, db: Session
             entity_id=workspace.id,
             severity="high",
             details=f"Workspace '{workspace.name}' ({workspace.slug}) created by '{admin_user.email}'",
-            **_client_info(request),
         )
         log_action(
             db=db,
+            ip_address=client.ip_address,
+            user_agent=client.user_agent,
             user_id=admin_user.id,
             workspace_id=workspace.id,
             action="USER_CREATED",
@@ -175,7 +184,6 @@ def signup_workspace(request: Request, data: WorkspaceSignupRequest, db: Session
             entity_id=admin_user.id,
             severity="medium",
             details=f"Admin '{admin_user.email}' created with the workspace",
-            **_client_info(request),
         )
         db.commit()
     except IntegrityError:

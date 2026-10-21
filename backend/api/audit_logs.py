@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from backend.models.audit_log import AuditLog
 from backend.models.user import User
-from backend.core.dependencies import get_current_user, get_current_workspace_id, scoped
+from backend.core.dependencies import get_current_user, get_current_workspace_id, scoped, ClientInfo, get_client_info
 from backend.schemas.audit_log import AuditLogResponse
 from backend.services.audit_service import log_action
 
@@ -16,6 +16,7 @@ def list_audit_logs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
 ):
     if current_user.role.name != "admin":
         raise HTTPException(status_code=403, detail="Only admin can view audit logs")
@@ -28,6 +29,8 @@ def list_audit_logs(
 
     log_action(
         db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
         user_id=current_user.id,
         action="AUDIT_VIEWED",
         entity_type="audit_log",
