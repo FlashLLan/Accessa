@@ -1,8 +1,7 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getMe } from "../api/users";
 import { setLastWorkspaceSlug } from "../utils/storage";
-
-export const AuthContext = createContext(null);
+import { AuthContext } from "./authContextObject";
 
 function normalizeUser(rawUser) {
   if (!rawUser) return null;

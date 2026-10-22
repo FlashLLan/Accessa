@@ -14,7 +14,6 @@ import {
   canEscalateRequest,
   canRejectRequest,
   canSubmitRequest,
-  canViewRequestComments,
 } from "../utils/requestPermissions";
 import {
   formatDate,
@@ -150,7 +149,6 @@ export default function RequestDetailsPage() {
   const [toastError, setToastError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const canViewComments = canViewRequestComments(user, request);
 
   useEffect(() => {
     loadAll();

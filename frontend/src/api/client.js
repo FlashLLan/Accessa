@@ -1,8 +1,10 @@
 import axios from "axios";
 import { isMfaSetupRequired, isPasswordChangeRequired } from "../utils/apiError";
 
+// API base URL from VITE_API_URL (frontend/.env*); vite.config.js fills in the
+// default and uses the same value for the production CSP's connect-src.
 const client = axios.create({
-  baseURL: "http://localhost:8000", // change if needed
+  baseURL: import.meta.env.VITE_API_URL,
 });
 
 client.interceptors.request.use((config) => {
