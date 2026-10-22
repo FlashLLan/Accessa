@@ -90,3 +90,17 @@ export function canDelegateRequest(user, request) {
   if (isRequestCreator(user, request)) return false;
   return isAdmin(user) || isAssignedReviewer(user, request);
 }
+
+// Roles that can be an assigned reviewer (approval matrix; mid reviews junior/low).
+export const REVIEWER_ROLES = ["admin", "lead", "senior", "mid"];
+
+// Requests currently waiting for this user's decision (from GET /users/me).
+export function hasPendingReviews(user) {
+  return (user?.pending_reviews_count ?? 0) > 0;
+}
+
+// The /review page: every reviewer role, plus anyone who currently has requests
+// assigned to them. The backend enforces what each user may actually decide.
+export function canOpenReviewQueue(user) {
+  return REVIEWER_ROLES.includes(user?.role) || hasPendingReviews(user);
+}

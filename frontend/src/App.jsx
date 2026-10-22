@@ -3,6 +3,7 @@ import { getLastWorkspaceSlug, workspaceLoginPath } from "./utils/storage";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import RoleGuard from "./components/common/RoleGuard";
 import AppLayout from "./components/layout/AppLayout";
+import { REVIEWER_ROLES, hasPendingReviews } from "./utils/requestPermissions";
 
 import LoginPage from "./pages/LoginPage";
 import FindWorkspacePage from "./pages/FindWorkspacePage";
@@ -38,7 +39,7 @@ function App() {
           <Route path="/requests/:id" element={<RequestDetailsPage />} />
 
           <Route
-            element={<RoleGuard allowedRoles={["admin", "lead", "senior"]} />}
+            element={<RoleGuard allowedRoles={REVIEWER_ROLES} allowIf={hasPendingReviews} />}
           >
             <Route path="/review" element={<ReviewPage />} />
           </Route>

@@ -12,7 +12,7 @@ import {
 } from "../utils/requestPresentation";
 
 export default function ReviewPage() {
-  const { user } = useAuth();
+  const { user, refreshMe } = useAuth();
 
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,7 +49,7 @@ export default function ReviewPage() {
       setActionLoadingId(id);
       setError("");
       await requestService.approve(id, decisionComment[id] || "");
-      await loadRequests();
+      await Promise.all([loadRequests(), refreshMe()]);
     } catch (err) {
       console.error("Approve failed", err);
       setToastError(
@@ -65,7 +65,7 @@ export default function ReviewPage() {
       setActionLoadingId(id);
       setError("");
       await requestService.reject(id, decisionComment[id] || "");
-      await loadRequests();
+      await Promise.all([loadRequests(), refreshMe()]);
     } catch (err) {
       console.error("Reject failed", err);
       setToastError(

@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import { hasPendingReviews } from "../../utils/requestPermissions";
 
 export default function Sidebar() {
   const { user } = useAuth();
@@ -24,9 +25,10 @@ export default function Sidebar() {
       roles: ["admin", "lead", "senior", "junior", "mid"],
     },
     {
+      // Shown to anyone with requests currently waiting for their decision.
       to: "/review",
-      label: "Review",
-      roles: ["admin", "lead", "senior"],
+      label: `Review (${user?.pending_reviews_count ?? 0})`,
+      visible: hasPendingReviews,
     },
     {
       to: "/admin/users",
@@ -40,7 +42,9 @@ export default function Sidebar() {
     },
   ];
 
-  const visibleItems = navItems.filter((item) => item.roles.includes(role));
+  const visibleItems = navItems.filter((item) =>
+    item.visible ? item.visible(user) : item.roles.includes(role)
+  );
 
   return (
     <aside className="sidebar">

@@ -32,6 +32,9 @@ class UserResponse(BaseModel):
 class UserMeResponse(UserResponse):
     workspace: WorkspaceResponse
     must_change_password: bool
+    # Requests in this workspace waiting for this user's decision (assigned
+    # reviewer, pending review). Drives the "Review" navigation item.
+    pending_reviews_count: int = 0
 
 
 class UserShortResponse(BaseModel):

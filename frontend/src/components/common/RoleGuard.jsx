@@ -2,7 +2,8 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { getLastWorkspaceSlug, workspaceLoginPath } from "../../utils/storage";
 
-export default function RoleGuard({ allowedRoles = [] }) {
+// Allows the listed roles, or anyone `allowIf(user)` accepts.
+export default function RoleGuard({ allowedRoles = [], allowIf }) {
   const { isAuthenticated, user, authLoading } = useAuth();
 
   if (authLoading) {
@@ -13,7 +14,7 @@ export default function RoleGuard({ allowedRoles = [] }) {
     return <Navigate to={workspaceLoginPath(getLastWorkspaceSlug())} replace />;
   }
 
-  if (!allowedRoles.includes(user.role)) {
+  if (!allowedRoles.includes(user.role) && !allowIf?.(user)) {
     return <Navigate to="/dashboard" replace />;
   }
 

@@ -133,7 +133,7 @@ function GitContextCard({ git }) {
 export default function RequestDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshMe } = useAuth();
 
   const [request, setRequest] = useState(null);
   const [approvals, setApprovals] = useState([]);
@@ -220,7 +220,7 @@ export default function RequestDetailsPage() {
       setRequest(updated);
       setDecisionComment("");
       setActionMessage("Request approved.");
-      await loadAll();
+      await Promise.all([loadAll(), refreshMe()]);
     } catch (err) {
       console.error("Failed to approve request", err);
       setToastError(
@@ -240,7 +240,7 @@ export default function RequestDetailsPage() {
       setRequest(updated);
       setDecisionComment("");
       setActionMessage("Request rejected.");
-      await loadAll();
+      await Promise.all([loadAll(), refreshMe()]);
     } catch (err) {
       console.error("Failed to reject request", err);
       setToastError(

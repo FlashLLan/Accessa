@@ -81,8 +81,22 @@ def list_users(
 
 
 @router.get("/me", response_model=UserMeResponse)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
+):
+    pending_reviews = (
+        scoped(db, ChangeRequest, workspace_id)
+        .filter(
+            ChangeRequest.assigned_reviewer_id == current_user.id,
+            ChangeRequest.status == RequestStatus.PENDING_REVIEW,
+        )
+        .count()
+    )
+    return UserMeResponse.model_validate(current_user).model_copy(
+        update={"pending_reviews_count": pending_reviews}
+    )
 
 
 @router.get("/reviewers", response_model=list[UserShortResponse])
