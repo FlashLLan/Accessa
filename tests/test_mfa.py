@@ -252,7 +252,9 @@ def test_five_wrong_codes_invalidate_the_pending_token(client, db, people, clock
     assert [e.severity for e in failed[:5]] == ["medium"] * 4 + ["high"]
     assert "invalidated" in failed[4].details
 
-    # A fresh login gets a fresh count.
+    # A fresh login gets 5 more tries with its own token (the account count stays at 5).
+    db.expire_all()
+    assert db.get(User, people["mid"].id).mfa_failed_attempts == 5
     assert _verify(client, _pending(client, people["mid"]), _code(secret, T0)).status_code == 200
 
 
@@ -263,6 +265,113 @@ def test_four_wrong_codes_still_allow_the_right_one(client, db, people, clock):
     for _ in range(4):
         _verify(client, token, wrong)
     assert _verify(client, token, _code(secret, T0)).status_code == 200
+
+
+# --- account lock after 10 consecutive wrong codes -----------------------------------------------------
+
+def _wrong(secret):
+    return "000000" if _code(secret, T0) != "000000" else "111111"
+
+
+def _fail(client, token, secret, times):
+    for _ in range(times):
+        assert _verify(client, token, _wrong(secret)).json() == INVALID
+
+
+def _attempts(db, user):
+    db.expire_all()
+    return db.get(User, user.id).mfa_failed_attempts
+
+
+def test_a_new_login_does_not_reset_the_wrong_code_count(client, db, people, clock):
+    secret = _enrol(db, people["mid"])
+    _fail(client, _pending(client, people["mid"]), secret, 3)
+    _pending(client, people["mid"])
+    assert _attempts(db, people["mid"]) == 3
+
+
+def test_wrong_codes_spread_over_several_logins_lock_the_account(client, db, people, clock):
+    secret = _enrol(db, people["mid"])
+    for wrong_codes in (4, 4, 1):  # 9 in a row, over three logins
+        _fail(client, _pending(client, people["mid"]), secret, wrong_codes)
+    assert _audit(db, "MFA_LOCKED") == []
+
+    _fail(client, _pending(client, people["mid"]), secret, 1)  # the 10th
+    [locked] = _audit(db, "MFA_LOCKED")
+    assert locked.severity == "high" and "15 minutes" in locked.details and "10 consecutive" in locked.details
+    assert (locked.ip_address, locked.user_agent) == ("testclient", USER_AGENT)
+    db.expire_all()
+    until = db.get(User, people["mid"].id).mfa_locked_until
+    assert until.timestamp() == T0 + 15 * 60
+
+    # While locked even the right code gets the generic error, after a new login too.
+    response = _verify(client, _pending(client, people["mid"]), _code(secret, T0))
+    assert (response.status_code, response.json()) == (401, INVALID)
+    assert "locked" in _audit(db, "MFA_FAILED")[-1].details
+    assert _audit(db, "LOGIN_SUCCESS") == []
+
+
+def test_lock_expires_after_15_minutes(client, db, people, clock):
+    secret = _enrol(db, people["mid"])
+    for wrong_codes in (5, 5):
+        _fail(client, _pending(client, people["mid"]), secret, wrong_codes)
+
+    clock.t = T0 + 15 * 60 - 1
+    assert _verify(client, _pending(client, people["mid"]), _code(secret, clock.t)).json() == INVALID
+
+    clock.t = T0 + 15 * 60
+    response = _verify(client, _pending(client, people["mid"]), _code(secret, clock.t))
+    assert response.status_code == 200, response.text
+    db.expire_all()
+    user = db.get(User, people["mid"].id)
+    assert (user.mfa_failed_attempts, user.mfa_locked_until) == (0, None)
+
+
+def test_after_the_lock_expires_the_next_wrong_code_locks_again(client, db, people, clock):
+    # The count is reset only by a successful verify or an admin reset.
+    secret = _enrol(db, people["mid"])
+    for wrong_codes in (5, 5):
+        _fail(client, _pending(client, people["mid"]), secret, wrong_codes)
+    clock.t = T0 + 15 * 60
+    _fail(client, _pending(client, people["mid"]), secret, 1)
+    assert len(_audit(db, "MFA_LOCKED")) == 2
+    db.expire_all()
+    assert db.get(User, people["mid"].id).mfa_locked_until.timestamp() == clock.t + 15 * 60
+
+
+def test_a_successful_verify_resets_the_counter(client, db, people, clock):
+    secret = _enrol(db, people["mid"])
+    for wrong_codes in (5, 4):
+        _fail(client, _pending(client, people["mid"]), secret, wrong_codes)
+    assert _attempts(db, people["mid"]) == 9
+    assert _verify(client, _pending(client, people["mid"]), _code(secret, T0)).status_code == 200
+    assert _attempts(db, people["mid"]) == 0
+
+    clock.t = T0 + 30
+    for wrong_codes in (5, 4):  # 9 more: 18 in total, but never 10 in a row
+        _fail(client, _pending(client, people["mid"]), secret, wrong_codes)
+    assert _audit(db, "MFA_LOCKED") == []
+    assert _verify(client, _pending(client, people["mid"]), _code(secret, clock.t)).status_code == 200
+
+
+def test_admin_reset_clears_the_lock(client, db, people, clock, login_user):
+    secret = _enrol(db, people["mid"])
+    for wrong_codes in (5, 5):
+        _fail(client, _pending(client, people["mid"]), secret, wrong_codes)
+    _enrol(db, people["admin"])
+
+    login_user(people["admin"])
+    assert client.patch(f"/users/{people['mid'].id}/mfa-reset").status_code == 200
+    db.expire_all()
+    user = db.get(User, people["mid"].id)
+    assert (user.mfa_failed_attempts, user.mfa_locked_until, user.mfa_enabled) == (0, None, False)
+
+    # Re-enrol, then the next login works right away (still within the old lock period).
+    login_user(people["mid"])
+    new_secret = client.post("/auth/mfa/setup").json()["secret"]
+    assert client.post("/auth/mfa/confirm", json={"code": _code(new_secret, T0)}).status_code == 200
+    clock.t = T0 + 30
+    assert _verify(client, _pending(client, people["mid"]), _code(new_secret, clock.t)).status_code == 200
 
 
 def test_verify_is_rate_limited_like_login(client, db, people, clock):

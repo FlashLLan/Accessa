@@ -41,11 +41,14 @@ def issue_access_token(user: User) -> str:
 
 def issue_mfa_pending_token(user: User) -> str:
     """Password was correct and MFA is enabled: a 5-minute token for /auth/mfa/verify
-    only. A new one replaces (revokes) any earlier one and resets the wrong-code count."""
+    only. A new one replaces (revokes) any earlier one.
+
+    The account's wrong-code count is NOT reset here (only a successful verify or an
+    admin MFA reset does), so logging in again does not buy fresh guesses. The token
+    carries the count at issue ("fa0") to apply the 5-wrong-codes-per-token limit."""
     jti = secrets.token_urlsafe(24)
     user.mfa_pending_jti = jti
-    user.mfa_failed_attempts = 0
-    return create_mfa_pending_token(_token_claims(user), jti)
+    return create_mfa_pending_token({**_token_claims(user), "fa0": user.mfa_failed_attempts}, jti)
 
 
 @router.post("/login", response_model=TokenResponse)

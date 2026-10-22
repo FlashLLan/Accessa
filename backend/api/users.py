@@ -474,6 +474,7 @@ def reset_user_mfa(
     user.mfa_last_used_step = None
     user.mfa_pending_jti = None  # also revokes a sign-in waiting for its code
     user.mfa_failed_attempts = 0
+    user.mfa_locked_until = None
 
     log_action(
         db=db,

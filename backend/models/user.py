@@ -29,10 +29,14 @@ class User(Base):
     mfa_secret_encrypted = Column(String, nullable=True)
     # Last accepted TOTP time step: a code for this step or an earlier one is rejected (no reuse).
     mfa_last_used_step = Column(BigInteger, nullable=True)
-    # The one valid mfa_pending token (its jti) and its wrong-code count; after 5
-    # wrong codes the jti is cleared, which invalidates that token.
+    # The one valid mfa_pending token (its jti); clearing it invalidates that token
+    # (after 5 wrong codes with it, a newer login, or an MFA reset).
     mfa_pending_jti = Column(String(64), nullable=True)
+    # Consecutive wrong codes for the account, across logins. Reset only by a
+    # successful verify or an admin MFA reset. At 10 the account is locked.
     mfa_failed_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    # Until then MFA verification is refused (same generic error, even for a right code).
+    mfa_locked_until = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True, server_default=true())
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now, server_default=func.now())

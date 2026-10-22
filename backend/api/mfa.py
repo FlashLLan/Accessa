@@ -7,6 +7,7 @@
 Codes and secrets are never logged or audited.
 """
 import hmac
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -30,7 +31,13 @@ router = APIRouter(prefix="/auth/mfa", tags=["MFA"])
 # One message for every verify failure: bad/expired/revoked token, wrong, reused
 # or malformed code, deactivated account.
 MFA_INVALID = "Invalid or expired code"
+# Wrong codes allowed with one mfa_pending token before it is revoked.
 MAX_FAILED_ATTEMPTS = 5
+# Consecutive wrong codes for an account (across logins) that lock MFA
+# verification for LOCK_SECONDS. The count is reset only by a successful verify
+# or an admin MFA reset, so after a lock expires the next wrong code locks again.
+LOCK_AFTER_FAILED_ATTEMPTS = 10
+LOCK_SECONDS = 15 * 60
 
 _pending_bearer = HTTPBearer(auto_error=False)
 
@@ -127,6 +134,7 @@ def verify_mfa(
         user_id = int(payload["sub"])
         token_workspace = UUID(payload["workspace"])
         jti = str(payload["jti"])
+        failures_at_issue = int(payload.get("fa0", 0))
     except (JWTError, KeyError, TypeError, ValueError, AttributeError):
         raise invalid
 
@@ -146,24 +154,46 @@ def verify_mfa(
         db.commit()
         raise invalid
 
+    now = mfa.now()
+    if user.mfa_locked_until is not None and user.mfa_locked_until.timestamp() > now:
+        # Locked: refused without looking at the code, with the same generic error.
+        log_action(db=db, ip_address=client.ip_address, user_agent=client.user_agent, **_about(user),
+                   action="MFA_FAILED", severity="medium",
+                   details="MFA verification refused: account locked after repeated wrong codes")
+        db.commit()
+        raise invalid
+
     step = _matching_step(user, data.code)
     if step is None:
         user.mfa_failed_attempts += 1
-        revoked = user.mfa_failed_attempts >= MAX_FAILED_ATTEMPTS
+        token_failures = max(1, user.mfa_failed_attempts - failures_at_issue)  # wrong codes with this token
+        locked = user.mfa_failed_attempts >= LOCK_AFTER_FAILED_ATTEMPTS
+        revoked = locked or token_failures >= MAX_FAILED_ATTEMPTS
         if revoked:
             user.mfa_pending_jti = None
+        if locked:
+            user.mfa_locked_until = datetime.fromtimestamp(now + LOCK_SECONDS, tz=timezone.utc)
         log_action(
             db=db, ip_address=client.ip_address, user_agent=client.user_agent, **_about(user), action="MFA_FAILED",
             severity="high" if revoked else "medium",
-            details=f"Wrong MFA code at login (attempt {user.mfa_failed_attempts} of {MAX_FAILED_ATTEMPTS})"
+            details=f"Wrong MFA code at login ({token_failures} of {MAX_FAILED_ATTEMPTS} for this sign-in, "
+                    f"{user.mfa_failed_attempts} in a row for the account)"
             + ("; sign-in attempt invalidated" if revoked else ""),
         )
+        if locked:
+            log_action(
+                db=db, ip_address=client.ip_address, user_agent=client.user_agent, **_about(user),
+                action="MFA_LOCKED", severity="high",
+                details=f"MFA verification locked for {LOCK_SECONDS // 60} minutes after "
+                        f"{user.mfa_failed_attempts} consecutive wrong codes",
+            )
         db.commit()
         raise invalid
 
     user.mfa_last_used_step = step
     user.mfa_pending_jti = None
     user.mfa_failed_attempts = 0
+    user.mfa_locked_until = None
     user.last_login_at = utc_now()
     log_action(db=db, ip_address=client.ip_address, user_agent=client.user_agent, **_about(user), action="MFA_VERIFIED", severity="low",
                details="MFA code accepted at login")
