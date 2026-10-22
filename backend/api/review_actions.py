@@ -93,7 +93,7 @@ def escalate_request(
     workspace_id: int = Depends(get_current_workspace_id),
     client: ClientInfo = Depends(get_client_info),
 ):
-    cr = get_request_or_404(db, workspace_id, request_id)
+    cr = get_request_or_404(db, workspace_id, request_id, for_update=True)
 
     _assert_can_transfer(cr, current_user, "escalate")
 
@@ -165,7 +165,7 @@ def delegate_request(
     workspace_id: int = Depends(get_current_workspace_id),
     client: ClientInfo = Depends(get_client_info),
 ):
-    cr = get_request_or_404(db, workspace_id, request_id)
+    cr = get_request_or_404(db, workspace_id, request_id, for_update=True)
 
     _assert_can_transfer(cr, current_user, "delegate")
 

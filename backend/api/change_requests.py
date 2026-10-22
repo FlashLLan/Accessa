@@ -165,7 +165,7 @@ def approve_change_request(
     workspace_id: int = Depends(get_current_workspace_id),
     client: ClientInfo = Depends(get_client_info),
 ):
-    change_request = get_request_or_404(db, workspace_id, request_id)
+    change_request = get_request_or_404(db, workspace_id, request_id, for_update=True)
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
@@ -228,7 +228,7 @@ def reject_change_request(
     workspace_id: int = Depends(get_current_workspace_id),
     client: ClientInfo = Depends(get_client_info),
 ):
-    change_request = get_request_or_404(db, workspace_id, request_id)
+    change_request = get_request_or_404(db, workspace_id, request_id, for_update=True)
 
     active_admin_count = None
     if change_request.creator.role.name == "admin":
@@ -379,7 +379,7 @@ def submit_change_request(
     workspace_id: int = Depends(get_current_workspace_id),
     client: ClientInfo = Depends(get_client_info),
 ):
-    change_request = get_request_or_404(db, workspace_id, request_id)
+    change_request = get_request_or_404(db, workspace_id, request_id, for_update=True)
 
     # Only the author may change or submit their own request; admins have no exception
     # here, so an admin cannot alter or push someone else's draft into review.
@@ -488,7 +488,7 @@ def apply_change_request(
     workspace_id: int = Depends(get_current_workspace_id),
     client: ClientInfo = Depends(get_client_info),
 ):
-    change_request = get_request_or_404(db, workspace_id, request_id)
+    change_request = get_request_or_404(db, workspace_id, request_id, for_update=True)
 
     if change_request.created_by != current_user.id:
         raise HTTPException(

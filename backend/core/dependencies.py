@@ -144,8 +144,15 @@ def scoped(db: Session, model, workspace_id: int):
     return db.query(model).filter(model.workspace_id == workspace_id)
 
 
-def get_request_or_404(db: Session, workspace_id: int, request_id: int) -> ChangeRequest:
-    cr = scoped(db, ChangeRequest, workspace_id).filter(ChangeRequest.id == request_id).first()
+def get_request_or_404(db: Session, workspace_id: int, request_id: int, *, for_update: bool = False) -> ChangeRequest:
+    """for_update=True locks the row (SELECT ... FOR UPDATE) until the transaction
+    ends, so concurrent state changes on one request run one after the other and
+    each re-checks the status it sees under the lock. populate_existing() makes
+    the locked read replace any copy already loaded in this session."""
+    query = scoped(db, ChangeRequest, workspace_id).filter(ChangeRequest.id == request_id)
+    if for_update:
+        query = query.populate_existing().with_for_update()
+    cr = query.first()
     if not cr:
         raise HTTPException(status_code=404, detail="Change request not found")
     return cr
