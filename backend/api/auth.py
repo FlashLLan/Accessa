@@ -8,7 +8,9 @@ from backend.models.user import User
 from backend.models.role import Role
 from backend.models.workspace import Workspace
 from backend.schemas.auth import LoginRequest, WorkspaceSignupRequest, TokenResponse
-from backend.core.security import verify_password, hash_password, create_access_token
+import secrets
+
+from backend.core.security import verify_password, hash_password, create_access_token, create_mfa_pending_token
 from backend.services.audit_service import log_action
 from backend.services.workspace_service import (
     create_workspace,
@@ -28,9 +30,22 @@ INVALID_CREDENTIALS = "Invalid credentials"
 _DUMMY_PASSWORD_HASH = hash_password("accessa-dummy-password-for-timing")
 
 
-def _issue_token(user: User) -> str:
+def _token_claims(user: User) -> dict:
     # The workspace is identified by its public UUID; internal integer ids stay out of tokens.
-    return create_access_token(data={"sub": str(user.id), "workspace": str(user.workspace.public_id)})
+    return {"sub": str(user.id), "workspace": str(user.workspace.public_id)}
+
+
+def issue_access_token(user: User) -> str:
+    return create_access_token(data=_token_claims(user))
+
+
+def issue_mfa_pending_token(user: User) -> str:
+    """Password was correct and MFA is enabled: a 5-minute token for /auth/mfa/verify
+    only. A new one replaces (revokes) any earlier one and resets the wrong-code count."""
+    jti = secrets.token_urlsafe(24)
+    user.mfa_pending_jti = jti
+    user.mfa_failed_attempts = 0
+    return create_mfa_pending_token(_token_claims(user), jti)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -91,6 +106,13 @@ def login(
         db.commit()
         raise invalid
 
+    if user.mfa_enabled:
+        # Second factor still missing: no access token yet, and no LOGIN_SUCCESS
+        # until /auth/mfa/verify accepts the code.
+        mfa_token = issue_mfa_pending_token(user)
+        db.commit()
+        return {"access_token": None, "token_type": "bearer", "mfa_required": True, "mfa_token": mfa_token}
+
     user.last_login_at = utc_now()
 
     log_action(
@@ -108,7 +130,7 @@ def login(
     db.commit()
 
     return {
-        "access_token": _issue_token(user),
+        "access_token": issue_access_token(user),
         "token_type": "bearer",
         "must_change_password": user.must_change_password,
     }
@@ -196,4 +218,4 @@ def signup_workspace(
         db.rollback()
         raise taken
 
-    return {"access_token": _issue_token(admin_user), "token_type": "bearer", "must_change_password": False}
+    return {"access_token": issue_access_token(admin_user), "token_type": "bearer", "must_change_password": False}

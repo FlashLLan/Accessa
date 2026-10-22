@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, false, func, true
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, false, func, true
 from sqlalchemy.orm import relationship
 
 from database.base import Base
@@ -24,7 +24,15 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
     must_change_password = Column(Boolean, nullable=False, default=False, server_default=false())
     mfa_enabled = Column(Boolean, nullable=False, default=False, server_default=false())
+    # TOTP secret, Fernet-encrypted with MFA_ENCRYPTION_KEY. Set by /auth/mfa/setup;
+    # mfa_enabled becomes true only after /auth/mfa/confirm.
     mfa_secret_encrypted = Column(String, nullable=True)
+    # Last accepted TOTP time step: a code for this step or an earlier one is rejected (no reuse).
+    mfa_last_used_step = Column(BigInteger, nullable=True)
+    # The one valid mfa_pending token (its jti) and its wrong-code count; after 5
+    # wrong codes the jti is cleared, which invalidates that token.
+    mfa_pending_jti = Column(String(64), nullable=True)
+    mfa_failed_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     is_active = Column(Boolean, nullable=False, default=True, server_default=true())
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now, server_default=func.now())

@@ -615,7 +615,10 @@ def test_must_change_password_blocks_other_endpoints_until_changed(client, db, r
     })
     assert changed.status_code == 200, changed.text
 
-    assert client.get("/change-requests/", headers=auth(token)).status_code == 200
+    # Next comes MFA enrolment (SEC-14): still blocked, now with mfa_setup_required.
+    after = client.get("/change-requests/", headers=auth(token))
+    assert after.status_code == 403
+    assert after.json()["detail"]["code"] == "mfa_setup_required"
     assert db.query(User).filter(User.email == "fresh@example.com").one().must_change_password is False
 
 

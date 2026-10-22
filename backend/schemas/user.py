@@ -22,6 +22,8 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: RoleResponse
     is_active: bool
+    # Whether MFA is enrolled; the secret itself is never part of any response.
+    mfa_enabled: bool = False
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

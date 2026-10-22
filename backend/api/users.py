@@ -450,6 +450,49 @@ def deactivate_user(
     return user
 
 
+@router.patch("/{user_id}/mfa-reset", response_model=UserResponse)
+def reset_user_mfa(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
+    client: ClientInfo = Depends(get_client_info),
+):
+    """Recovery when a user lost their authenticator: clears the secret, so the user
+    must enrol again before doing anything else. Another admin resets an admin."""
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can reset MFA")
+
+    user = get_user_or_404(db, workspace_id, user_id)
+
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot reset your own MFA")
+
+    was_enabled = user.mfa_enabled
+    user.mfa_enabled = False
+    user.mfa_secret_encrypted = None
+    user.mfa_last_used_step = None
+    user.mfa_pending_jti = None  # also revokes a sign-in waiting for its code
+    user.mfa_failed_attempts = 0
+
+    log_action(
+        db=db,
+        ip_address=client.ip_address,
+        user_agent=client.user_agent,
+        user_id=current_user.id,
+        action="MFA_RESET",
+        entity_type="user",
+        entity_id=user.id,
+        severity="high",
+        old_value="enabled" if was_enabled else "not enabled",
+        new_value="not enabled",
+        details="MFA reset by admin; the user must enrol again",
+    )
+    db.commit()
+
+    return user
+
+
 @router.patch("/{user_id}/reactivate", response_model=UserResponse)
 def reactivate_user(
     user_id: int,

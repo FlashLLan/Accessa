@@ -15,6 +15,7 @@ from backend.api import roles
 from backend.api import git_context
 from backend.api import ai_review
 from backend.api import review_actions
+from backend.api import mfa
 from fastapi.middleware.cors import CORSMiddleware
 
 # The schema is managed only by Alembic migrations (alembic upgrade head),
@@ -44,6 +45,7 @@ app.include_router(roles.router)
 app.include_router(git_context.router)
 app.include_router(ai_review.router)
 app.include_router(review_actions.router)
+app.include_router(mfa.router)
 
 @app.get("/")
 def root():

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -21,6 +21,24 @@ class WorkspaceSignupRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
+    # None when MFA is still required: then mfa_token is set instead, and the
+    # access token comes from POST /auth/mfa/verify.
+    access_token: str | None = None
     token_type: str
     must_change_password: bool = False
+    mfa_required: bool = False
+    mfa_token: str | None = None
+
+
+class MfaCodeRequest(BaseModel):
+    # Validated in the endpoint, so a malformed code gets the same error as a wrong one.
+    code: str = Field(default="", max_length=32)
+
+
+class MfaSetupResponse(BaseModel):
+    otpauth_uri: str
+    secret: str  # for manual entry; returned only while MFA is not yet enabled
+
+
+class MfaStatusResponse(BaseModel):
+    mfa_enabled: bool

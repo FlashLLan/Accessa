@@ -10,6 +10,10 @@ import { Link } from "react-router-dom";
 const ACTION_LABELS = {
   LOGIN_SUCCESS: "Login",
   LOGIN_FAILED: "Failed Login",
+  MFA_ENROLLED: "MFA Enrolled",
+  MFA_VERIFIED: "MFA Verified",
+  MFA_FAILED: "MFA Failed",
+  MFA_RESET: "MFA Reset",
   WORKSPACE_CREATED: "Workspace Created",
   USER_CREATED: "User Created",
   USER_DEACTIVATED: "User Deactivated",
@@ -47,7 +51,7 @@ const ENTITY_LABELS = {
 const ENTITY_FILTER_OPTIONS = ["user", "change_request", "audit_log"];
 
 const ACTION_CATEGORIES = {
-  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED"],
+  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED", "MFA_ENROLLED", "MFA_VERIFIED", "MFA_FAILED", "MFA_RESET"],
   user_management: ["USER_CREATED", "USER_DEACTIVATED", "USER_REACTIVATED", "ROLE_ASSIGNED", "ROLE_CHANGED", "PROFILE_UPDATED", "PASSWORD_CHANGED"],
   change_requests: ["REQUEST_CREATED", "REQUEST_SUBMITTED", "REQUEST_UPDATED", "REQUEST_APPROVED", "REQUEST_REJECTED", "REQUEST_ESCALATED", "REQUEST_DELEGATED", "REQUEST_APPLIED", "COMMENT_CREATED"],
   git: ["GIT_CONTEXT_LINKED", "GIT_CONTEXT_UPDATED"],

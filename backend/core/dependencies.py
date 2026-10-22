@@ -11,7 +11,7 @@ from backend.models.user import User
 from backend.models.change_request import ChangeRequest
 from backend.models.audit_log import AuditLog
 from backend.models.workspace import Workspace
-from backend.core.security import SECRET_KEY, ALGORITHM
+from backend.core.security import SECRET_KEY, ALGORITHM, TOKEN_TYPE_ACCESS
 
 security = HTTPBearer()
 
@@ -47,6 +47,15 @@ _ALLOWED_BEFORE_PASSWORD_CHANGE = {
     ("PUT", "/users/me/password"),
 }
 
+# Error code returned (403) while the account has no MFA yet (SEC-14). Checked after
+# the password change, so a new user changes the password first, then enrols.
+MFA_SETUP_REQUIRED = "mfa_setup_required"
+
+_ALLOWED_BEFORE_MFA_SETUP = _ALLOWED_BEFORE_PASSWORD_CHANGE | {
+    ("POST", "/auth/mfa/setup"),
+    ("POST", "/auth/mfa/confirm"),
+}
+
 
 def get_current_user(
     request: Request,
@@ -58,6 +67,9 @@ def get_current_user(
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Only access tokens; an mfa_pending token is accepted by /auth/mfa/verify alone.
+        if payload.get("type") != TOKEN_TYPE_ACCESS:
+            raise invalid_token
         user_id = int(payload["sub"])
         token_workspace = UUID(payload["workspace"])
     except (JWTError, KeyError, TypeError, ValueError, AttributeError):
@@ -86,6 +98,17 @@ def get_current_user(
                 detail={
                     "code": PASSWORD_CHANGE_REQUIRED,
                     "message": "You must change your password before continuing.",
+                },
+            )
+
+    if not user.mfa_enabled:
+        route = request.scope.get("route")
+        if (request.method, getattr(route, "path", None)) not in _ALLOWED_BEFORE_MFA_SETUP:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": MFA_SETUP_REQUIRED,
+                    "message": "You must set up multi-factor authentication before continuing.",
                 },
             )
 

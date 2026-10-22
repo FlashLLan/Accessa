@@ -118,6 +118,9 @@ def test_workspace_events_never_return_internal_workspace_id(client, db, create_
         "email": "owner@example.com", "password": "Password123",
     })
     token = signup.json()["access_token"]
+    # The audit log is behind the MFA gate (SEC-14); enrolment itself is tested in test_mfa.py.
+    db.query(User).filter(User.email == "owner@example.com").update({"mfa_enabled": True})
+    db.commit()
 
     entries = client.get("/audit-logs/", headers={"Authorization": f"Bearer {token}"}).json()
     created = next(e for e in entries if e["action"] == "WORKSPACE_CREATED")
