@@ -70,6 +70,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), cspMetaTag(policy)],
     // One value for the API client (src/api/client.js) and the CSP's connect-src.
     define: { 'import.meta.env.VITE_API_URL': JSON.stringify(apiUrl) },
+    // `npm test` (Vitest): components rendered in jsdom.
+    test: { environment: 'jsdom' },
     // `vite preview` serves the production build: there the full policy is a real
     // response header, including frame-ancestors.
     preview: {
