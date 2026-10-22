@@ -64,3 +64,7 @@ export async function getMyStats() {
   const response = await client.get("/users/me/stats");
   return response.data;
 }
+export async function resetUserMfa(userId) {
+  const response = await client.patch(`/users/${userId}/mfa-reset`);
+  return response.data;
+}

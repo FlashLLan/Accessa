@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { loginRequest } from "../api/auth";
+import { loginRequest, verifyMfaRequest } from "../api/auth";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -13,6 +13,43 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Second step: the short-lived mfa_pending token, kept in memory only.
+  const [mfaToken, setMfaToken] = useState("");
+  const [code, setCode] = useState("");
+
+  async function finishLogin(data) {
+    await login(data.access_token);
+    navigate(data.must_change_password ? "/change-password" : "/dashboard");
+  }
+
+  function startOver() {
+    setMfaToken("");
+    setCode("");
+    setPassword("");
+    setError("");
+  }
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const data = await verifyMfaRequest(mfaToken, code.trim());
+      setMfaToken("");
+      await finishLogin(data);
+    } catch (error) {
+      // One generic answer for every failure (wrong, reused or expired code,
+      // too many wrong codes), by design.
+      setError(
+        error?.response?.status === 429
+          ? "Too many attempts. Please wait a minute and try again."
+          : "Invalid or expired code. After 5 wrong codes, start over."
+      );
+      setCode("");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,8 +59,11 @@ export default function LoginPage() {
     try {
       const data = await loginRequest({ workspaceSlug, email, password });
 
-      await login(data.access_token);
-      navigate(data.must_change_password ? "/change-password" : "/dashboard");
+      if (data.mfa_required) {
+        setMfaToken(data.mfa_token);
+        return;
+      }
+      await finishLogin(data);
     } catch (error) {
       console.error("Login failed", error);
 
@@ -39,6 +79,57 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (mfaToken) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-header">
+            <p className="auth-kicker">Accessa</p>
+            <h1>Enter your code</h1>
+            <p className="auth-workspace">
+              Workspace <code>{workspaceSlug}</code>
+            </p>
+            <p className="auth-subtitle">
+              Open your authenticator app and enter the 6-digit code for Accessa ({email}).
+            </p>
+          </div>
+
+          <form className="auth-form" onSubmit={handleVerify}>
+            <div className="form-group">
+              <label htmlFor="mfa_code">6-digit code</label>
+              <input
+                id="mfa_code"
+                className="mfa-code-input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="123456"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                required
+                autoFocus
+              />
+            </div>
+
+            {error && <div className="auth-error">{error}</div>}
+
+            <button className="btn btn-primary auth-submit" type="submit" disabled={isSubmitting || code.length !== 6}>
+              {isSubmitting ? "Checking..." : "Verify"}
+            </button>
+          </form>
+
+          <p className="auth-switch">
+            <button type="button" className="link-button" onClick={startOver}>
+              Start over
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-page">

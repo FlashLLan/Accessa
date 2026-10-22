@@ -1494,3 +1494,39 @@
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+
+
+/* ── MFA (SEC-14) ─────────────────────────────────────────────── */
+
+.mfa-qr {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0 20px;
+}
+
+.mfa-qr img {
+  padding: 10px;
+  border-radius: 12px;
+  background: #ffffff; /* QR codes need a light background to scan reliably */
+}
+
+.mfa-secret {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--heading);
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.mfa-code-input {
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 20px;
+  letter-spacing: 0.3em;
+  text-align: center;
+}

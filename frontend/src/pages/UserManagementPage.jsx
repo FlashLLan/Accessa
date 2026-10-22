@@ -10,6 +10,7 @@ import {
   getUserDetails,
   getUsers,
   reactivateUser,
+  resetUserMfa,
   updateUserRole,
 } from "../api/users";
 import { parseUtcDate } from "../utils/requestPresentation";
@@ -336,6 +337,28 @@ const handleToggleActive = async (targetUser) => {
   });
 };
 
+const handleResetMfa = (targetUser) => {
+  openConfirmModal({
+    title: "Reset two-factor authentication",
+    message: `Reset MFA for ${targetUser.full_name}? Their authenticator app will stop working for Accessa, and they must set up MFA again at their next login before they can do anything else. Do this only after confirming the person's identity.`,
+    confirmText: "Reset MFA",
+    confirmVariant: "danger",
+    onConfirm: async () => {
+      setSubmitting(true);
+      try {
+        await resetUserMfa(targetUser.id);
+        setToast({ message: `MFA reset for ${targetUser.full_name}.`, type: "success" });
+        await loadData();
+      } catch (err) {
+        console.error("Failed to reset MFA", err);
+        setToast({ message: extractApiError(err, "Failed to reset MFA."), type: "error" });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+  });
+};
+
   const isSelf = (targetUser) => currentUser?.id === targetUser.id;
 
   const getStatusLabel = (targetUser) => {
@@ -629,6 +652,9 @@ const handleToggleActive = async (targetUser) => {
                       <span className={getStatusClass(targetUser)}>
                         {getStatusLabel(targetUser)}
                       </span>
+                      <span className="form-hint" style={{ marginTop: 4 }}>
+                        {targetUser.mfa_enabled ? "MFA enrolled" : "MFA not set up"}
+                      </span>
                         </td>
 
                         <td className="actions-col">
@@ -690,6 +716,18 @@ const handleToggleActive = async (targetUser) => {
                             >
                               {targetUser.is_active ? "Disable" : "Reactivate"}
                             </button>
+
+                            {!self && (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => handleResetMfa(targetUser)}
+                                    disabled={submitting || !targetUser.mfa_enabled}
+                                    title={targetUser.mfa_enabled ? "" : "This user has not set up MFA yet"}
+                                >
+                                  Reset MFA
+                                </button>
+                            )}
                           </div>
                         </td>
                       </tr>

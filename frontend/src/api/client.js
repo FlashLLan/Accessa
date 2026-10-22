@@ -1,5 +1,5 @@
 import axios from "axios";
-import { isPasswordChangeRequired } from "../utils/apiError";
+import { isMfaSetupRequired, isPasswordChangeRequired } from "../utils/apiError";
 
 const client = axios.create({
   baseURL: "http://localhost:8000", // change if needed
@@ -7,19 +7,23 @@ const client = axios.create({
 
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
-  if (token) {
+  // A request that already names its token (the MFA code step) keeps it.
+  if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
 // The backend blocks every endpoint except "my profile" and "change my password"
-// until an admin-set initial password is changed. Send the user to that page.
+// until an admin-set initial password is changed, and then everything except MFA
+// enrolment until MFA is set up. Send the user to the matching page.
 client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (isPasswordChangeRequired(error) && window.location.pathname !== "/change-password") {
       window.location.assign("/change-password");
+    } else if (isMfaSetupRequired(error) && window.location.pathname !== "/mfa-setup") {
+      window.location.assign("/mfa-setup");
     }
     return Promise.reject(error);
   }

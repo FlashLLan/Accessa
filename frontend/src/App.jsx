@@ -8,6 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import FindWorkspacePage from "./pages/FindWorkspacePage";
 import SignupPage from "./pages/SignupPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import MfaSetupPage from "./pages/MfaSetupPage";
 import DashboardPage from "./pages/DashboardPage";
 import RequestsPage from "./pages/RequestsPage";
 import RequestDetailsPage from "./pages/RequestDetailsPage";
@@ -28,6 +29,7 @@ function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/change-password" element={<ChangePasswordPage />} />
+        <Route path="/mfa-setup" element={<MfaSetupPage />} />
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />

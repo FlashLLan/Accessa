@@ -131,9 +131,9 @@ export default function SignupPage() {
           <button
             type="button"
             className="btn btn-primary auth-submit"
-            onClick={() => navigate("/admin/users")}
+            onClick={() => navigate("/mfa-setup")}
           >
-            Continue to User Management
+            Continue: set up two-factor authentication
           </button>
         </div>
       </div>
