@@ -1,6 +1,6 @@
 """Create demo data through the HTTP API only.
 
-    python scripts/seed_demo.py [--api-url http://localhost:8000] [--workspace-slug demo]
+    python scripts/seed_demo.py --enrol-mfa [--api-url http://localhost:8000] [--workspace-slug demo]
 
 Every record is created the way a real user would create it (sign-up, admin
 creates users, login, forced password change, create/submit/approve/reject/
@@ -15,13 +15,22 @@ Admin-created users first get a random initial password and change it to
 DEMO_PASSWORD through the API, as the forced password change requires.
 The credentials are printed once, at the end.
 
+MFA is mandatory in Accessa: an account without it can do nothing except change
+its password and enrol. Therefore:
+- with --enrol-mfa, every demo user enrols through the API (setup + confirm with
+  a code computed here), and each user's TOTP setup key is printed once at the
+  end, to be added to an authenticator app by hand. The keys exist only in that
+  output and, encrypted, in the database; they are not written anywhere else.
+- without it, only the workspace and its first admin are created; that admin
+  sets up MFA in the browser at first login and adds the other users.
+
 Refuses to run unless the API URL points at localhost. Needs a running backend,
 the five roles, and a workspace slug that is still free. From an empty database:
 
     python scripts/reset_local_dev_db.py --no-seed   # stop the backend first
     python -m backend.core.seed_roles
     uvicorn backend.main:app                          # start the backend again
-    python scripts/seed_demo.py
+    python scripts/seed_demo.py --enrol-mfa
 """
 import argparse
 import os
@@ -30,6 +39,7 @@ import sys
 import time
 from urllib.parse import urlparse
 
+import pyotp
 import requests
 from dotenv import load_dotenv
 
@@ -89,13 +99,23 @@ class Api:
         return response.json() if response.content else None
 
 
-def main() -> None:
+def enrol_mfa(api: "Api", token: str) -> str:
+    """Set up and confirm MFA for the account behind `token`; returns the setup key."""
+    secret = api.call("POST", "/auth/mfa/setup", token)["secret"]
+    api.call("POST", "/auth/mfa/confirm", token, json={"code": pyotp.TOTP(secret).now()})
+    return secret
+
+
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--api-url", default="http://localhost:8000")
     parser.add_argument("--workspace-slug", default="demo")
     parser.add_argument("--workspace-name", default="Demo Team")
     parser.add_argument("--frontend-url", default="http://localhost:5173", help="only used for the printed login link")
-    args = parser.parse_args()
+    parser.add_argument("--enrol-mfa", action="store_true",
+                        help="enrol every demo user in MFA and print their TOTP setup keys once (needed for the "
+                             "full demo: without MFA an account can do nothing)")
+    args = parser.parse_args(argv)
 
     assert_local_api(args.api_url)
     load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
@@ -114,6 +134,15 @@ def main() -> None:
     tokens = {ADMIN[0]: signup["access_token"]}
     credentials.append((ADMIN[0], "admin", admin_password))
     admin = tokens[ADMIN[0]]
+    mfa_keys: dict[str, str] = {}
+
+    if not args.enrol_mfa:
+        print("\nDone (workspace and first admin only; run with --enrol-mfa for the full demo).")
+        print(f"Workspace login: {args.frontend_url.rstrip('/')}/w/{slug}")
+        print(f"  {ADMIN[0]:<20} admin   {admin_password}   (sets up MFA in the browser at first login)")
+        return
+
+    mfa_keys[ADMIN[0]] = enrol_mfa(api, admin)
 
     roles = {r["name"]: r["id"] for r in api.call("GET", "/roles/", admin)}
     ids = {ADMIN[0]: api.call("GET", "/users/me", admin)["id"]}
@@ -135,6 +164,7 @@ def main() -> None:
         })
         tokens[email] = login["access_token"]
         credentials.append((email, role, final))
+        mfa_keys[email] = enrol_mfa(api, tokens[email])  # after the password change, as in the app
 
     def token(email):
         return tokens[email]
@@ -240,9 +270,10 @@ def main() -> None:
 
     # --- summary -------------------------------------------------------------------
     print(f"\nDone. Workspace login: {args.frontend_url.rstrip('/')}/w/{slug}")
-    print("\nCredentials (shown once; the password comes from DEMO_PASSWORD):")
+    print("\nCredentials and TOTP setup keys (shown once; the password comes from DEMO_PASSWORD).")
+    print("Add each key to an authenticator app (manual entry, time-based, 6 digits, issuer Accessa):")
     for email, role, password in credentials:
-        print(f"  {email:<20} {role:<7} {password}")
+        print(f"  {email:<20} {role:<7} {password}   MFA key: {mfa_keys[email]}")
 
 
 if __name__ == "__main__":
