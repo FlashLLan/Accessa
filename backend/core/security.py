@@ -2,7 +2,7 @@ import os
 from datetime import timedelta
 
 import bcrypt
-from jose import jwt
+import jwt  # PyJWT
 
 from backend.core.timeutils import utc_now
 

@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pyotp
 import pytest
 from fastapi.routing import APIRoute
-from jose import jwt
+import jwt  # PyJWT
 
 from backend.core import mfa
 from backend.core.dependencies import get_current_user
@@ -20,6 +20,11 @@ PASSWORD = "Password123"
 USER_AGENT = "MfaTest/1.0"
 T0 = 1_800_000_000.0  # a fixed point in time, at the start of a 30 s step
 INVALID = {"detail": "Invalid or expired code"}
+
+
+def _claims(token):
+    """Claims without verifying signature or expiry (inspection only)."""
+    return jwt.decode(token, options={"verify_signature": False})
 
 
 def _fake_hash(p):
@@ -104,7 +109,7 @@ def test_login_without_code_gives_no_access_token(client, db, people, clock):
     body = response.json()
     assert body["access_token"] is None
     assert body["mfa_required"] is True and body["mfa_token"]
-    claims = jwt.get_unverified_claims(body["mfa_token"])
+    claims = _claims(body["mfa_token"])
     assert claims["type"] == "mfa_pending"
     assert claims["exp"] - claims.get("iat", utc_now().timestamp()) <= 5 * 60 + 5
     assert _audit(db, "LOGIN_SUCCESS") == []  # not logged in until the code is accepted
@@ -116,7 +121,7 @@ def test_valid_code_returns_a_working_access_token(client, db, people, clock):
 
     assert response.status_code == 200, response.text
     token = response.json()["access_token"]
-    assert jwt.get_unverified_claims(token)["type"] == "access"
+    assert _claims(token)["type"] == "access"
     assert client.get("/change-requests/", headers=_h(token)).status_code == 200
     assert len(_audit(db, "LOGIN_SUCCESS")) == 1
 
@@ -166,7 +171,7 @@ def test_a_code_cannot_be_used_twice(client, db, people, clock):
 def test_expired_pending_token_fails(client, db, people, clock):
     secret = _enrol(db, people["mid"])
     token = _pending(client, people["mid"])
-    claims = jwt.get_unverified_claims(token)
+    claims = _claims(token)
     claims["exp"] = int((utc_now() - timedelta(seconds=1)).timestamp())
     expired = jwt.encode(claims, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -177,7 +182,7 @@ def test_expired_pending_token_fails(client, db, people, clock):
 def test_tampered_or_foreign_tokens_fail(client, db, people, clock):
     secret = _enrol(db, people["mid"])
     token = _pending(client, people["mid"])
-    claims = jwt.get_unverified_claims(token)
+    claims = _claims(token)
 
     for bad in (
         jwt.encode({**claims, "jti": "guessed"}, SECRET_KEY, algorithm=ALGORITHM),       # unknown jti

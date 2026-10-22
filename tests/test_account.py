@@ -2,9 +2,8 @@ from unittest.mock import patch
 
 
 # --- security mock helpers ---------------------------------------------
-# We avoid calling bcrypt in tests because passlib 1.7.x + bcrypt 4.x have
-# a known incompatibility that raises ValueError on hashpw calls.
-# Instead, patch the two functions imported into the users router.
+# bcrypt is deliberately slow, so tests patch the two hashing functions
+# imported into the users router instead of calling it.
 
 _FAKE_PREFIX = "TESTHASH:"
 

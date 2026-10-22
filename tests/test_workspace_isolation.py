@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import psycopg.errors
 import pytest
-from jose import jwt as jose_jwt
+import jwt as pyjwt
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 
@@ -432,7 +432,7 @@ def test_login_token_carries_workspace_public_id_not_internal_id(client, ws):
     response = login(client, ws["a"].slug, ws["junior_a"].email)
 
     assert response.status_code == 200, response.text
-    payload = jose_jwt.decode(response.json()["access_token"], SECRET_KEY, algorithms=[ALGORITHM])
+    payload = pyjwt.decode(response.json()["access_token"], SECRET_KEY, algorithms=[ALGORITHM])
     assert payload["workspace"] == str(ws["a"].public_id)
     assert "workspace_id" not in payload
     assert payload["sub"] == str(ws["junior_a"].id)

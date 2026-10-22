@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+import jwt  # PyJWT
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -72,7 +72,8 @@ def get_current_user(
             raise invalid_token
         user_id = int(payload["sub"])
         token_workspace = UUID(payload["workspace"])
-    except (JWTError, KeyError, TypeError, ValueError, AttributeError):
+    # PyJWTError covers a bad signature, expiry, malformed tokens and invalid claims.
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError, AttributeError):
         raise invalid_token
 
     user = db.query(User).filter(User.id == user_id).first()

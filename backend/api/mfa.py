@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt  # PyJWT
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -135,7 +135,7 @@ def verify_mfa(
         token_workspace = UUID(payload["workspace"])
         jti = str(payload["jti"])
         failures_at_issue = int(payload.get("fa0", 0))
-    except (JWTError, KeyError, TypeError, ValueError, AttributeError):
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError, AttributeError):
         raise invalid
 
     user = _locked_user(db, user_id)
