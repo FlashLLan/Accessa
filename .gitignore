@@ -26,4 +26,5 @@ Thumbs.db
 
 #prompts
 *.md
+!DEPLOYMENT.md
 *.pdf

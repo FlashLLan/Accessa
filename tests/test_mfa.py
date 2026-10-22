@@ -223,7 +223,8 @@ def test_deactivated_user_cannot_finish_the_login(client, db, people, clock):
 def test_mfa_pending_token_is_rejected_by_every_other_endpoint(client, db, people, clock):
     _enrol(db, people["admin"])
     token = _pending(client, people["admin"])
-    public = {("POST", "/auth/login"), ("POST", "/auth/signup"), ("GET", "/"), ("POST", "/auth/mfa/verify")}
+    public = {("POST", "/auth/login"), ("POST", "/auth/signup"), ("GET", "/"), ("GET", "/health"),
+              ("POST", "/auth/mfa/verify")}
 
     checked = 0
     for route in app.routes:

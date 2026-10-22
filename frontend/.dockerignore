@@ -1,0 +1,8 @@
+node_modules
+dist
+# Local env files must not be baked into the bundle; VITE_API_URL comes from
+# the Railway build variable.
+.env
+.env.*
+!.env.example
+src/__tests__
