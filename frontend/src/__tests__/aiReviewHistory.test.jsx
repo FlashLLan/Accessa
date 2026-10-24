@@ -127,4 +127,16 @@ describe("Regenerating with nothing changed", () => {
     await waitFor(() => expect(onError).toHaveBeenCalledWith("GitHub rate limit reached."));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it("says the PR moved and what a new review covers", async () => {
+    api.generateAiReview.mockRejectedValueOnce({ response: { status: 409, data: { detail: {
+      code: "ai_review_unchanged", head_moved: true, current_head: "dde0dd0", commit: "7c0f3b2",
+      message: "The pull request has new commits since submission (now at dde0dd0). This request covers only 7c0f3b2; new changes require a new request. A new AI review will still cover only the submitted commit 7c0f3b2, with the same scope as the latest review. Generate it again anyway?",
+    } } } });
+    renderSection([THIRD]);
+    fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.querySelector("h3").textContent).toBe("The pull request has new commits");
+    expect(dialog.textContent).toContain("will still cover only the submitted commit 7c0f3b2");
+  });
 });

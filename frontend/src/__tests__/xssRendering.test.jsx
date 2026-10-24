@@ -55,6 +55,7 @@ vi.mock("../services/requestsService.js", () => ({
 
 vi.mock("../api/changeRequests", () => ({
   generateAiReview: vi.fn(),
+  getGitHead: vi.fn(async () => null),
   getAiReviews: vi.fn(async () => [{
     id: 1,
     change_request_id: 7,

@@ -152,3 +152,15 @@ def fetch_for_submission(pull_request_url: str) -> GitData:
     with GitHubClient() as client:
         snapshot = client.fetch_pull_request(pull_request_url, with_contents=False)
     return build_git_data(snapshot)
+
+
+def current_head_quietly(pull_request_url: str | None) -> str | None:
+    """The PR's current head commit (one GitHub request), or None if it cannot be
+    read right now. Used only to show that a PR moved on; never raises."""
+    if not is_github_pull_request(pull_request_url):
+        return None
+    try:
+        with GitHubClient() as client:
+            return client.pull_request(pull_request_url)[2]
+    except Exception:  # noqa: BLE001 - informational only; GitHub may be down or rate limited
+        return None

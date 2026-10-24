@@ -138,6 +138,15 @@ def list_change_requests(
     ).order_by(ChangeRequest.created_at.desc()).all()
 
 
+def decided_commit(cr: ChangeRequest) -> str:
+    """'commit=<sha> (github)' for the audit of a decision; source says whether the
+    commit was fetched from GitHub at submission or entered by the requester."""
+    git = cr.git_context
+    if git is None or not git.commit_hash:
+        return "commit=none"
+    return f"commit={git.commit_hash} ({git.source.value})"
+
+
 @router.get("/{request_id}", response_model=ChangeRequestResponse)
 def get_change_request(
     request_id: int,
@@ -213,7 +222,9 @@ def approve_change_request(
             f"requester_role={change_request.creator.role.name} | "
             f"risk_level={change_request.risk_level.value} | "
             # Only whether a comment was given: its text stays in the approvals table.
-            f"comment={'yes' if (action.decision_comment or '').strip() else 'no'}"
+            f"comment={'yes' if (action.decision_comment or '').strip() else 'no'} | "
+            # Exactly which code was decided on (the commit stored at submission).
+            f"{decided_commit(change_request)}"
         )
     )
     db.commit()
@@ -278,7 +289,9 @@ def reject_change_request(
             f"requester_role={change_request.creator.role.name} | "
             f"risk_level={change_request.risk_level.value} | "
             # Only whether a comment was given: its text stays in the approvals table.
-            f"comment={'yes' if (action.decision_comment or '').strip() else 'no'}"
+            f"comment={'yes' if (action.decision_comment or '').strip() else 'no'} | "
+            # Exactly which code was decided on (the commit stored at submission).
+            f"{decided_commit(change_request)}"
         )
     )
     db.commit()

@@ -5,6 +5,7 @@ import AiReviewSection from "../components/requests/AiReviewSection";
 import DiffView from "../components/requests/DiffView";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users.js";
+import { getGitHead } from "../api/changeRequests";
 import { useAuth } from "../hooks/useAuth";
 import { extractApiError } from "../utils/apiError";
 import {
@@ -44,7 +45,7 @@ function SafeLink({ url, label }) {
   return <span>{url}</span>;
 }
 
-function GitContextCard({ git }) {
+function GitContextCard({ git, head }) {
   if (!git) {
     return (
       <div className="details-section">
@@ -113,6 +114,13 @@ function GitContextCard({ git }) {
         )}
       </div>
 
+      {head?.head_moved && (
+        <div className="ai-review-warning" role="note">
+          ⚠ The pull request has new commits since submission (now at {head.current_head.slice(0, 7)}).
+          This request covers only {head.stored_commit.slice(0, 7)}; new changes require a new request.
+        </div>
+      )}
+
       {(git.diff_text || git.changed_files_summary) && (
         <p className={`git-provenance ${git.source === "github" ? "git-provenance-verified" : ""}`}>
           {git.source === "github"
@@ -147,6 +155,8 @@ export default function RequestDetailsPage() {
   const [approvals, setApprovals] = useState([]);
   const [comments, setComments] = useState([]);
   const [reviewActions, setReviewActions] = useState([]);
+  // Did the PR move on since the submitted snapshot? Informational only.
+  const [gitHead, setGitHead] = useState(null);
   const [availableReviewers, setAvailableReviewers] = useState([]);
   const [commentText, setCommentText] = useState("");
   const [decisionComment, setDecisionComment] = useState("");
@@ -176,6 +186,12 @@ export default function RequestDetailsPage() {
 
       setRequest(requestData);
       setApprovals(approvalsData);
+      if (requestData?.git_context?.source === "github") {
+        // One GitHub call; any failure just means no warning.
+        getGitHead(id).then(setGitHead).catch(() => setGitHead(null));
+      } else {
+        setGitHead(null);
+      }
       setComments(commentsData);
       setReviewActions(reviewActionsData);
 
@@ -410,7 +426,7 @@ const canTransfer = canEscalate || canDelegate;
         <p>{request.description}</p>
       </div>
 
-      <GitContextCard git={request.git_context} />
+      <GitContextCard git={request.git_context} head={gitHead} />
 
       <AiReviewSection request={request} user={user} onError={setToastError} />
 

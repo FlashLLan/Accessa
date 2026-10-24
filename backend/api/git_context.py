@@ -7,7 +7,9 @@ from backend.models.enums import RequestStatus
 from backend.models.git_context import GitContext
 from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404, ClientInfo, get_client_info
 from backend.models.user import User
-from backend.schemas.git_context import GitContextCreate, GitContextResponse
+from backend.models.enums import GitContextSource
+from backend.schemas.git_context import GitContextCreate, GitContextResponse, GitHeadResponse
+from backend.services.pull_request_data import current_head_quietly
 from backend.services.audit_service import log_action
 
 router = APIRouter(prefix="/change-requests", tags=["Git Context"])
@@ -46,6 +48,33 @@ def get_git_context(
         raise HTTPException(status_code=404, detail="No git context for this request")
 
     return cr.git_context
+
+
+@router.get("/{request_id}/git-context/head", response_model=GitHeadResponse)
+def get_git_head(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_current_workspace_id),
+):
+    """The PR's current head vs. the commit fetched at submission (one GitHub request).
+    The request still covers only the stored commit; this only makes a moved PR
+    visible. If GitHub cannot be read, current_head is null and nothing fails."""
+    cr = get_request_or_404(db, workspace_id, request_id)
+    _check_access(cr, current_user)
+    git = cr.git_context
+    if git is None or git.source != GitContextSource.GITHUB or not git.commit_hash:
+        return {"applicable": False, "stored_commit": git.commit_hash if git else None}
+
+    stored, url = git.commit_hash, git.pull_request_url
+    db.rollback()  # no transaction open while GitHub answers
+    current = current_head_quietly(url)
+    return {
+        "applicable": True,
+        "stored_commit": stored,
+        "current_head": current,
+        "head_moved": current is not None and current != stored,
+    }
 
 
 @router.post("/{request_id}/git-context", response_model=GitContextResponse)

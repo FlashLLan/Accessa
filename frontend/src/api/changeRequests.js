@@ -88,3 +88,10 @@ export async function generateAiReview(id, scope = "changed_files", force = fals
   const response = await client.post(`/change-requests/${id}/ai-review`, { scope, force });
   return response.data;
 }
+
+// The PR's current head vs. the commit fetched at submission (one GitHub call;
+// current_head is null when GitHub cannot be read).
+export async function getGitHead(id) {
+  const response = await client.get(`/change-requests/${id}/git-context/head`);
+  return response.data;
+}

@@ -112,3 +112,11 @@ class GitContextResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GitHeadResponse(BaseModel):
+    """Whether the pull request moved on since the commit stored at submission."""
+    applicable: bool              # GitHub-fetched Git context with a stored commit
+    stored_commit: str | None = None
+    current_head: str | None = None   # None if not applicable or GitHub unavailable
+    head_moved: bool = False

@@ -166,15 +166,15 @@ function AiReviewResult({ result, requestRiskLevel }) {
 
 const AI_REVIEW_UNCHANGED = "ai_review_unchanged";
 
-function UnchangedDialog({ message, onCancel, onConfirm }) {
+function UnchangedDialog({ detail, onCancel, onConfirm }) {
   return createPortal(
     <div className="modal-overlay" onClick={onCancel}>
       <div className="confirm-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="confirm-modal-header">
-          <h3>Nothing has changed</h3>
+          <h3>{detail.head_moved ? "The pull request has new commits" : "Nothing has changed"}</h3>
         </div>
         <div className="confirm-modal-body">
-          <p>{message}</p>
+          <p>{detail.message}</p>
           <p className="form-hint">
             The AI would see the same input as for the latest review. Generating again costs another AI call.
           </p>
@@ -200,7 +200,7 @@ export default function AiReviewSection({ request, user, onError }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [scope, setScope] = useState("changed_files");
-  const [unchanged, setUnchanged] = useState(null); // message of the "nothing changed" warning
+  const [unchanged, setUnchanged] = useState(null); // 409 detail of the "nothing changed" warning
 
   const requestId = request.id;
   const shown = results[index] ?? null;
@@ -242,7 +242,7 @@ export default function AiReviewSection({ request, user, onError }) {
     } catch (err) {
       const detail = err?.response?.data?.detail;
       if (err?.response?.status === 409 && detail?.code === AI_REVIEW_UNCHANGED) {
-        setUnchanged(detail.message);
+        setUnchanged(detail);
       } else {
         onError(extractApiError(err, "Failed to generate the AI review."));
       }
@@ -323,7 +323,7 @@ export default function AiReviewSection({ request, user, onError }) {
       )}
 
       {unchanged && (
-        <UnchangedDialog message={unchanged} onCancel={() => setUnchanged(null)} onConfirm={() => generate(true)} />
+        <UnchangedDialog detail={unchanged} onCancel={() => setUnchanged(null)} onConfirm={() => generate(true)} />
       )}
     </div>
   );

@@ -511,5 +511,49 @@ def test_unchanged_check_for_github_data_uses_the_stored_commit(client, db, peop
     with mocked_services(github, FakeOpenAI()):
         assert _generate(client, pending).status_code == 200
         before = len(github.requests)
-        assert _generate(client, pending).status_code == 409
-    assert len(github.requests) == before  # no GitHub request needed for the check
+        response = _generate(client, pending)
+    assert response.status_code == 409
+    # The comparison uses the stored commit; the only GitHub request is the PR's
+    # head, to tell whether the PR moved on (no files, no contents).
+    check_requests = github.requests[before:]
+    assert [r.url.path for r in check_requests] == ["/repos/octo/demo/pulls/7"]
+    detail = response.json()["detail"]
+    assert detail["head_moved"] is False and detail["message"].startswith("Nothing has changed")
+
+
+def _github_snapshot(db, pending, commit):
+    from backend.models.enums import GitContextSource
+    git = pending.git_context
+    git.source, git.commit_hash = GitContextSource.GITHUB, commit
+    git.diff_text = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -0,0 +1 @@\n+x = 1"
+    db.commit()
+
+
+def test_unchanged_dialog_says_the_pr_moved_and_what_a_new_review_covers(client, db, people, pending, login_user):
+    _github_snapshot(db, pending, OTHER_SHA)
+    login_user(people["reviewer"])
+    github = FakeGitHub({"a.py": b"x = 1\n"}, [], head_sha=SHA, content_ref=OTHER_SHA)
+    with mocked_services(github, FakeOpenAI()):
+        assert _generate(client, pending).status_code == 200
+        response = _generate(client, pending)
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["head_moved"] is True and detail["current_head"] == SHA and detail["commit"] == OTHER_SHA
+    assert detail["message"].startswith(
+        f"The pull request has new commits since submission (now at {SHA[:7]}). "
+        f"This request covers only {OTHER_SHA[:7]}; new changes require a new request.")
+    assert f"will still cover only the submitted commit {OTHER_SHA[:7]}" in detail["message"]
+
+
+def test_unchanged_dialog_still_works_when_github_fails(client, db, people, pending, login_user):
+    _github_snapshot(db, pending, SHA)
+    login_user(people["reviewer"])
+    with mocked_services(FakeGitHub({"a.py": b"x = 1\n"}, []), FakeOpenAI()):
+        assert _generate(client, pending).status_code == 200
+    down = FakeGitHub({}, [], fail=lambda r: httpx.Response(503))
+    with mocked_services(down, FakeOpenAI()):
+        response = _generate(client, pending)
+    assert response.status_code == 409
+    assert response.json()["detail"]["head_moved"] is False
+    assert response.json()["detail"]["current_head"] is None

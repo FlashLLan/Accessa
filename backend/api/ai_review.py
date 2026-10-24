@@ -11,7 +11,12 @@ from backend.models.enums import GitContextSource, RequestStatus
 from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404, ClientInfo, get_client_info
 from backend.models.user import User
 from backend.schemas.ai_review_result import AIReviewResultResponse, AIReviewTrigger
-from backend.services.ai_review_service import RequestFacts, review_target_commit, run_ai_review
+from backend.services.ai_review_service import (
+    RequestFacts,
+    current_head_quietly,
+    review_target_commit,
+    run_ai_review,
+)
 from backend.services.audit_service import log_action
 from backend.services.github_service import GitHubError
 from backend.services.openai_client import AIServiceError
@@ -115,13 +120,29 @@ def trigger_ai_review(
         if latest_basis and not trigger.force:
             target_commit = review_target_commit(facts)
             if latest_basis == (target_commit, scope):
+                # Submitted snapshot: the PR may have moved on, which the reviewer
+                # should know (one GitHub request; unknown if GitHub fails).
+                current_head = current_head_quietly(facts) if facts.submitted_commit else target_commit
+                head_moved = current_head is not None and current_head != target_commit
+                short = target_commit[:7]
+                if head_moved:
+                    message = (
+                        f"The pull request has new commits since submission (now at {current_head[:7]}). "
+                        f"This request covers only {short}; new changes require a new request. "
+                        f"A new AI review will still cover only the submitted commit {short}, with the same "
+                        f"scope as the latest review. Generate it again anyway?"
+                    )
+                else:
+                    message = (
+                        f"Nothing has changed since the latest AI review: same commit {short} and same "
+                        f"scope. Generate it again anyway?"
+                    )
                 raise HTTPException(status_code=409, detail={
                     "code": AI_REVIEW_UNCHANGED,
-                    "message": (
-                        f"Nothing has changed since the latest AI review: same commit "
-                        f"{target_commit[:7]} and same scope. Generate it again anyway?"
-                    ),
+                    "message": message,
                     "commit": target_commit,
+                    "current_head": current_head,
+                    "head_moved": head_moved,
                     "scope": scope.value,
                 })
         review = run_ai_review(facts, scope)

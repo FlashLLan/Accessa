@@ -273,6 +273,15 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
 HEAD_MOVED_FLAG = "The pull request has new commits since submission"
 
 
+def current_head_quietly(facts: RequestFacts) -> str | None:
+    """The PR's current head (one GitHub request), or None if GitHub cannot be read."""
+    try:
+        with GitHubClient() as github:
+            return github.pull_request(facts.pull_request_url)[2]
+    except Exception:  # noqa: BLE001 - only used to word a warning
+        return None
+
+
 def review_target_commit(facts: RequestFacts) -> str:
     """The commit a review would cover now: the one stored at submission, or (for
     manually entered Git data) the PR's current head, which costs one GitHub request."""
