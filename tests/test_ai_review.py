@@ -6,7 +6,7 @@ import httpx
 import pytest
 from sqlalchemy import text
 
-from ai_review_helpers import GOOD_OUTPUT, PR_URL, SHA, FakeGitHub, FakeOpenAI, mocked_services
+from ai_review_helpers import GOOD_OUTPUT, OTHER_SHA, PR_URL, SHA, FakeGitHub, FakeOpenAI, mocked_services
 from backend.models.ai_review_result import AIReviewResult
 from backend.models.audit_log import AuditLog
 from backend.models.enums import AIReviewScope, RequestStatus, RiskLevel
@@ -456,3 +456,60 @@ def test_latest_result_comes_first(client, db, people, pending, login_user):
         second = _generate(client, pending, {"scope": "extended"}).json()["id"]
     results = client.get(f"/change-requests/{pending.id}/ai-review").json()
     assert [r["id"] for r in results] == [second, first]
+
+
+# --- regenerating with nothing changed --------------------------------------------------------------
+
+def test_regenerating_with_same_commit_and_scope_asks_first(client, db, people, pending, login_user):
+    login_user(people["reviewer"])
+    ai = FakeOpenAI()
+    with mocked_services(_github(), ai):
+        assert _generate(client, pending).status_code == 200
+        calls = len(ai.requests)
+        again = _generate(client, pending)
+
+    assert again.status_code == 409
+    detail = again.json()["detail"]
+    assert detail["code"] == "ai_review_unchanged"
+    assert detail["commit"] == SHA and detail["scope"] == "changed_files"
+    assert SHA[:7] in detail["message"] and "anyway" in detail["message"]
+    assert len(ai.requests) == calls  # the AI was not called
+    assert db.query(AIReviewResult).count() == 1
+    assert db.query(AuditLog).filter(AuditLog.action == "AI_REVIEW_GENERATED").count() == 1
+
+
+def test_force_generates_again_with_nothing_changed(client, db, people, pending, login_user):
+    login_user(people["reviewer"])
+    with mocked_services(_github(), FakeOpenAI()):
+        first = _generate(client, pending).json()["id"]
+        second = _generate(client, pending, {"scope": "changed_files", "force": True})
+    assert second.status_code == 200
+    assert second.json()["id"] != first
+    assert db.query(AIReviewResult).count() == 2
+
+
+def test_other_scope_or_moved_head_generates_without_asking(client, db, people, pending, login_user):
+    login_user(people["reviewer"])
+    with mocked_services(_github(), FakeOpenAI()):
+        assert _generate(client, pending).status_code == 200
+        assert _generate(client, pending, {"scope": "extended"}).status_code == 200  # other scope
+    # Manually entered Git data: the review covers the PR's current head, which moved.
+    with mocked_services(FakeGitHub(dict(REPO), [dict(f) for f in PR_FILES], head_sha=OTHER_SHA), FakeOpenAI()):
+        moved = _generate(client, pending, {"scope": "extended"})
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["reviewed_commit"] == OTHER_SHA
+
+
+def test_unchanged_check_for_github_data_uses_the_stored_commit(client, db, people, pending, login_user):
+    from backend.models.enums import GitContextSource
+    git = pending.git_context
+    git.source, git.commit_hash = GitContextSource.GITHUB, SHA
+    git.diff_text = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -0,0 +1 @@\n+x = 1"
+    db.commit()
+    login_user(people["reviewer"])
+    github = FakeGitHub({"a.py": b"x = 1\n"}, [])
+    with mocked_services(github, FakeOpenAI()):
+        assert _generate(client, pending).status_code == 200
+        before = len(github.requests)
+        assert _generate(client, pending).status_code == 409
+    assert len(github.requests) == before  # no GitHub request needed for the check

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { generateAiReview, getAiReviews } from "../../api/changeRequests";
 import { extractApiError } from "../../utils/apiError";
 import { isAssignedReviewer } from "../../utils/requestPermissions";
@@ -163,23 +164,60 @@ function AiReviewResult({ result, requestRiskLevel }) {
   );
 }
 
+const AI_REVIEW_UNCHANGED = "ai_review_unchanged";
+
+function UnchangedDialog({ message, onCancel, onConfirm }) {
+  return createPortal(
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="confirm-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="confirm-modal-header">
+          <h3>Nothing has changed</h3>
+        </div>
+        <div className="confirm-modal-body">
+          <p>{message}</p>
+          <p className="form-hint">
+            The AI would see the same input as for the latest review. Generating again costs another AI call.
+          </p>
+        </div>
+        <div className="confirm-modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onConfirm}>
+            Generate anyway
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export default function AiReviewSection({ request, user, onError }) {
-  const [latest, setLatest] = useState(null);
+  // Every stored result, newest first; `index` is the one shown (0 = latest).
+  const [results, setResults] = useState([]);
+  const [index, setIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [scope, setScope] = useState("changed_files");
+  const [unchanged, setUnchanged] = useState(null); // message of the "nothing changed" warning
 
   const requestId = request.id;
+  const shown = results[index] ?? null;
+  const latest = results[0] ?? null;
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     getAiReviews(requestId)
-      .then((results) => {
-        if (!cancelled) setLatest(results[0] ?? null); // newest first
+      .then((data) => {
+        if (!cancelled) {
+          setResults(Array.isArray(data) ? data : []);
+          setIndex(0);
+        }
       })
       .catch(() => {
-        if (!cancelled) setLatest(null);
+        if (!cancelled) setResults([]);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -194,26 +232,60 @@ export default function AiReviewSection({ request, user, onError }) {
     request.status === "pending_review" &&
     Boolean(request.git_context?.pull_request_url);
 
-  async function handleGenerate() {
+  async function generate(force = false) {
+    setUnchanged(null);
     try {
       setIsGenerating(true);
-      const result = await generateAiReview(requestId, scope);
-      setLatest(result);
+      const result = await generateAiReview(requestId, scope, force);
+      setResults((prev) => [result, ...prev]);
+      setIndex(0);
     } catch (err) {
-      onError(extractApiError(err, "Failed to generate the AI review."));
+      const detail = err?.response?.data?.detail;
+      if (err?.response?.status === 409 && detail?.code === AI_REVIEW_UNCHANGED) {
+        setUnchanged(detail.message);
+      } else {
+        onError(extractApiError(err, "Failed to generate the AI review."));
+      }
     } finally {
       setIsGenerating(false);
     }
   }
 
+  const total = results.length;
+
   return (
     <div className="details-section">
       <h3 className="details-section-title">AI Review</h3>
 
+      {!isLoading && total > 1 && (
+        <div className="ai-review-nav" aria-label="AI review history">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setIndex((i) => Math.min(i + 1, total - 1))}
+            disabled={index >= total - 1}
+          >
+            ◀ Older
+          </button>
+          <span className="ai-review-nav-label">
+            Review {total - index} of {total}
+            {index === 0 ? " (latest)" : ""}
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setIndex((i) => Math.max(i - 1, 0))}
+            disabled={index === 0}
+          >
+            Newer ▶
+          </button>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="empty-state" style={{ padding: "12px 0" }}>Loading AI review…</div>
-      ) : latest ? (
-        <AiReviewResult result={latest} requestRiskLevel={request.risk_level} />
+      ) : shown ? (
+        <AiReviewResult result={shown} requestRiskLevel={request.risk_level} />
       ) : (
         !canGenerate && (
           <div className="empty-state" style={{ padding: "12px 0" }}>No AI review yet.</div>
@@ -239,7 +311,7 @@ export default function AiReviewSection({ request, user, onError }) {
             <span className="form-hint">{SCOPES[scope].help}</span>
           </div>
           <div className="page-actions" style={{ alignItems: "center" }}>
-            <button className="btn btn-primary" type="button" onClick={handleGenerate} disabled={isGenerating}>
+            <button className="btn btn-primary" type="button" onClick={() => generate(false)} disabled={isGenerating}>
               {isGenerating ? "Analysing…" : latest ? "Regenerate" : "Generate AI review"}
             </button>
             {isGenerating && <span className="form-hint" style={{ marginTop: 0 }}>This can take up to a minute.</span>}
@@ -248,6 +320,10 @@ export default function AiReviewSection({ request, user, onError }) {
             Covers up to 100 changed files; files over 200 KB are skipped; secret values are masked before sending.
           </span>
         </div>
+      )}
+
+      {unchanged && (
+        <UnchangedDialog message={unchanged} onCancel={() => setUnchanged(null)} onConfirm={() => generate(true)} />
       )}
     </div>
   );

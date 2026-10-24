@@ -11,12 +11,15 @@ from backend.models.enums import GitContextSource, RequestStatus
 from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404, ClientInfo, get_client_info
 from backend.models.user import User
 from backend.schemas.ai_review_result import AIReviewResultResponse, AIReviewTrigger
-from backend.services.ai_review_service import RequestFacts, run_ai_review
+from backend.services.ai_review_service import RequestFacts, review_target_commit, run_ai_review
 from backend.services.audit_service import log_action
 from backend.services.github_service import GitHubError
 from backend.services.openai_client import AIServiceError
 
 router = APIRouter(prefix="/change-requests", tags=["AI Review"])
+
+# 409 detail code when a regeneration would use the same commit and scope.
+AI_REVIEW_UNCHANGED = "ai_review_unchanged"
 
 
 def _check_access(cr: ChangeRequest, current_user: User):
@@ -70,7 +73,8 @@ def trigger_ai_review(
     """Advisory AI review of the request and its public GitHub pull request.
     Never changes the request's risk level or status. If GitHub or the AI service
     fails, an error is returned and nothing is saved."""
-    scope = (payload or AIReviewTrigger()).scope
+    trigger = payload or AIReviewTrigger()
+    scope = trigger.scope
     cr = get_request_or_404(db, workspace_id, request_id)
     _check_can_generate(cr, current_user)
 
@@ -95,10 +99,31 @@ def trigger_ai_review(
         submitted_diff=git.diff_text if git.source == GitContextSource.GITHUB else None,
         submitted_summary=git.changed_files_summary if git.source == GitContextSource.GITHUB else None,
     )
+    latest = (
+        db.query(AIReviewResult)
+        .filter(AIReviewResult.change_request_id == request_id)
+        .order_by(AIReviewResult.created_at.desc(), AIReviewResult.id.desc())
+        .first()
+    )
+    latest_basis = (latest.reviewed_commit, latest.review_scope) if latest else None
     # GitHub and the AI can take up to a minute: do not keep a transaction open.
     db.rollback()
 
     try:
+        # Same commit and scope as the latest result: the AI would see the same
+        # input. Ask first (409) instead of paying for an identical review.
+        if latest_basis and not trigger.force:
+            target_commit = review_target_commit(facts)
+            if latest_basis == (target_commit, scope):
+                raise HTTPException(status_code=409, detail={
+                    "code": AI_REVIEW_UNCHANGED,
+                    "message": (
+                        f"Nothing has changed since the latest AI review: same commit "
+                        f"{target_commit[:7]} and same scope. Generate it again anyway?"
+                    ),
+                    "commit": target_commit,
+                    "scope": scope.value,
+                })
         review = run_ai_review(facts, scope)
     except (GitHubError, AIServiceError) as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from None

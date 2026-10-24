@@ -1548,3 +1548,20 @@
   background: rgba(34, 197, 94, 0.08);
   color: #4ade80;
 }
+
+
+/* AI review history: switch between stored results. */
+.ai-review-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-review-nav-label {
+  font-size: 13px;
+  color: var(--text-soft);
+}

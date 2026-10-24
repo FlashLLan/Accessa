@@ -7,6 +7,9 @@ from backend.models.enums import AIReviewScope
 class AIReviewTrigger(BaseModel):
     # Chosen by the reviewer for this review; the body may be omitted entirely.
     scope: AIReviewScope = AIReviewScope.CHANGED_FILES
+    # Generate even if the commit and scope are the same as the latest result
+    # (otherwise 409 "ai_review_unchanged", without calling the AI).
+    force: bool = False
 
 
 class ReviewedFile(BaseModel):

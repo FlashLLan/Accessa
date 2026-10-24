@@ -82,7 +82,9 @@ export async function getAiReviews(id) {
 }
 
 // scope: "changed_files" (default) or "extended", chosen by the reviewer.
-export async function generateAiReview(id, scope = "changed_files") {
-  const response = await client.post(`/change-requests/${id}/ai-review`, { scope });
+// force: generate even if the commit and scope equal the latest result's (the
+// backend otherwise answers 409 with code "ai_review_unchanged").
+export async function generateAiReview(id, scope = "changed_files", force = false) {
+  const response = await client.post(`/change-requests/${id}/ai-review`, { scope, force });
   return response.data;
 }

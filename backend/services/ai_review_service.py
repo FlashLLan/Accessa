@@ -273,6 +273,15 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
 HEAD_MOVED_FLAG = "The pull request has new commits since submission"
 
 
+def review_target_commit(facts: RequestFacts) -> str:
+    """The commit a review would cover now: the one stored at submission, or (for
+    manually entered Git data) the PR's current head, which costs one GitHub request."""
+    if facts.submitted_commit:
+        return facts.submitted_commit
+    with GitHubClient() as github:
+        return github.pull_request(facts.pull_request_url)[2]
+
+
 def _submitted_snapshot(github: GitHubClient, facts: RequestFacts) -> PullRequestSnapshot:
     """The PR as submitted: files and patches from the stored diff, full contents
     read at the stored commit. One extra request tells whether the head moved."""
