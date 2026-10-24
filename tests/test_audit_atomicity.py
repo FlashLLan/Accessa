@@ -121,8 +121,7 @@ def test_failed_audit_write_rolls_back_approval(client, db, app_db_engine, peopl
      "SELECT count(*) FROM comments", 0),
     ("reviewer", "post", "/change-requests/{id}/escalate", {"target_reviewer_id": "senior"}, "review_actions",
      "SELECT assigned_reviewer_id = {reviewer} FROM change_requests WHERE id = {id}", True),
-    ("reviewer", "post", "/change-requests/{id}/git-context", {"branch_name": "x"}, "git_context",
-     "SELECT count(*) FROM git_context", 0),
+    # Git context: only the creator on a draft, see test_failed_audit_write_rolls_back_git_context.
     # AI review: covered in test_ai_review.py (needs GitHub and OpenAI mocked).
     ("admin", "patch", "/users/{creator}/deactivate", None, "users",
      "SELECT is_active FROM users WHERE id = {creator}", True),
@@ -155,5 +154,16 @@ def test_failed_audit_write_rolls_back_new_change_request_and_git_context(client
 
     # The request, its git context and the first audit entry share one transaction.
     assert _committed(app_db_engine, "SELECT count(*) FROM change_requests") == 0
+    assert _committed(app_db_engine, "SELECT count(*) FROM git_context") == 0
+    assert _committed(app_db_engine, "SELECT count(*) FROM audit_logs") == 0
+
+
+def test_failed_audit_write_rolls_back_git_context(client, db, app_db_engine, people, login_user, seed_change_request):
+    draft = seed_change_request(db, creator_id=people["creator"].id, reviewer_id=people["reviewer"].id)
+    login_user(people["creator"])
+    with patch("backend.api.git_context.log_action", side_effect=RuntimeError("audit store down")):
+        with pytest.raises(RuntimeError):
+            client.post(f"/change-requests/{draft.id}/git-context", json={"branch_name": "x"})
+
     assert _committed(app_db_engine, "SELECT count(*) FROM git_context") == 0
     assert _committed(app_db_engine, "SELECT count(*) FROM audit_logs") == 0

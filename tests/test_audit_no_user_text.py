@@ -65,17 +65,19 @@ def test_missing_or_blank_decision_comment_is_recorded_as_no(client, db, people,
 def test_no_user_written_text_in_any_audit_entry(client, db, people, login_user):
     # Every free-text field a user can fill in carries MARK.
     login_user(people["junior"])
+    # Git identifiers (URLs, branches, commit) are logged on purpose; the diff,
+    # the file summary and the repository name are free text.
     request_id = _create(client, people, git_context={
-        "provider": "github", "repository_name": f"repo-{MARK}", "branch_name": f"feature/{MARK}",
-        "target_branch": f"main-{MARK}", "commit_hash": f"c-{MARK}",
-        "repository_url": f"https://github.com/octo/{MARK}",
-        "pull_request_url": f"https://github.com/octo/{MARK}/pull/1",
+        "provider": "github", "repository_name": f"repo-{MARK}", "branch_name": "feature/x",
+        "target_branch": "main", "commit_hash": "abc1234",
+        "repository_url": "https://github.com/octo/demo",
+        "pull_request_url": "https://github.com/octo/demo/pull/1",
         "changed_files_summary": f"files {MARK}", "diff_text": f"+{MARK}",
     })
     assert client.patch(f"/change-requests/{request_id}",
                         json={"title": f"New title {MARK}", "description": f"New description {MARK}"}).status_code == 200
     assert client.post(f"/change-requests/{request_id}/git-context",
-                       json={"branch_name": f"other/{MARK}", "diff_text": f"-{MARK}"}).status_code == 200
+                       json={"branch_name": "feature/y", "diff_text": f"-{MARK}"}).status_code == 200
     assert client.post(f"/change-requests/{request_id}/submit").status_code == 200
     assert client.post(f"/change-requests/{request_id}/comments",
                        json={"comment_text": f"Comment {MARK}"}).status_code == 200
@@ -96,11 +98,12 @@ def test_no_user_written_text_in_any_audit_entry(client, db, people, login_user)
     leaks = [(r.action, t) for r, t in zip(rows, texts) if MARK in t]
     assert leaks == []
 
-    # Git context entries say which fields were set, not their values.
+    # Git context entries carry the identifiers, never the diff or summary.
     linked = next(t for r, t in zip(rows, texts) if r.action == "GIT_CONTEXT_LINKED")
-    assert "branch_name" in linked and "diff_text" in linked
-    updated = next(t for r, t in zip(rows, texts) if r.action == "GIT_CONTEXT_UPDATED")
-    assert "fields=branch_name,diff_text" in updated
+    assert "branch_name=feature/x" in linked and "repository_url=https://github.com/octo/demo" in linked
+    updated = next(r for r in rows if r.action == "GIT_CONTEXT_UPDATED")
+    assert (updated.old_value, updated.new_value) == ("branch_name=feature/x", "branch_name=feature/y")
+    assert "also sent: diff_text" in updated.details
 
     # The texts are still stored where they belong.
     assert db.query(Comment).filter(Comment.comment_text == f"Comment {MARK}").count() == 1

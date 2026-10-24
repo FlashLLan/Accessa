@@ -23,6 +23,7 @@ from backend.core.dependencies import (
     get_request_or_404,
     get_user_or_404,
 )
+from backend.api.git_context import format_identifiers
 from backend.services.audit_service import log_action
 from backend.core.timeutils import utc_now
 from backend.services.approval_service import can_user_decide_request
@@ -110,8 +111,8 @@ def create_change_request(
             entity_id=new_request.id,
             request_id=new_request.id,
             severity="low",
-            # Which fields were set, not their (user-entered) values.
-            details=f"Git context linked: fields={','.join(gc.model_dump(exclude_none=True)) or '-'}",
+            # Technical identifiers only; never diff_text or changed_files_summary.
+            details=f"Git context linked: {format_identifiers(gc.model_dump())}",
         )
 
     db.commit()
