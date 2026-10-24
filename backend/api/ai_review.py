@@ -7,7 +7,7 @@ from database.db import get_db
 from backend.core.limiter import limiter
 from backend.models.change_request import ChangeRequest
 from backend.models.ai_review_result import AIReviewResult
-from backend.models.enums import GitContextSource, RequestStatus
+from backend.models.enums import AIReviewScope, GitContextSource, RequestStatus
 from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404, ClientInfo, get_client_info
 from backend.models.user import User
 from backend.schemas.ai_review_result import AIReviewResultResponse, AIReviewTrigger
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/change-requests", tags=["AI Review"])
 
 # 409 detail code when a regeneration would use the same commit and scope.
 AI_REVIEW_UNCHANGED = "ai_review_unchanged"
+SCOPE_LABELS = {AIReviewScope.CHANGED_FILES: "Changed files", AIReviewScope.EXTENDED: "Extended"}
 
 
 def _check_access(cr: ChangeRequest, current_user: User):
@@ -104,38 +105,45 @@ def trigger_ai_review(
         submitted_diff=git.diff_text if git.source == GitContextSource.GITHUB else None,
         submitted_summary=git.changed_files_summary if git.source == GitContextSource.GITHUB else None,
     )
-    latest = (
-        db.query(AIReviewResult)
+    # Earlier results, oldest first (their position is "review n of N" in the UI).
+    earlier = (
+        db.query(AIReviewResult.id, AIReviewResult.reviewed_commit, AIReviewResult.review_scope)
         .filter(AIReviewResult.change_request_id == request_id)
-        .order_by(AIReviewResult.created_at.desc(), AIReviewResult.id.desc())
-        .first()
+        .order_by(AIReviewResult.created_at.asc(), AIReviewResult.id.asc())
+        .all()
     )
-    latest_basis = (latest.reviewed_commit, latest.review_scope) if latest else None
+    # The latest review with the requested scope: alternating scopes must not
+    # hide that this scope was already reviewed at the same commit.
+    same_scope = [(n, row) for n, row in enumerate(earlier, start=1) if row.review_scope == scope]
+    match = same_scope[-1] if same_scope else None
     # GitHub and the AI can take up to a minute: do not keep a transaction open.
     db.rollback()
 
     try:
-        # Same commit and scope as the latest result: the AI would see the same
-        # input. Ask first (409) instead of paying for an identical review.
-        if latest_basis and not trigger.force:
+        # Same commit as the latest review with the same scope: the AI would see
+        # the same input. Ask first (409) instead of paying for an identical review.
+        if match and not trigger.force:
+            number, matched = match
             target_commit = review_target_commit(facts)
-            if latest_basis == (target_commit, scope):
+            if matched.reviewed_commit == target_commit:
                 # Submitted snapshot: the PR may have moved on, which the reviewer
                 # should know (one GitHub request; unknown if GitHub fails).
                 current_head = current_head_quietly(facts) if facts.submitted_commit else target_commit
                 head_moved = current_head is not None and current_head != target_commit
                 short = target_commit[:7]
+                scope_label = SCOPE_LABELS[scope]
+                which = f"review {number} of {len(earlier)}"
                 if head_moved:
                     message = (
                         f"The pull request has new commits since submission (now at {current_head[:7]}). "
                         f"This request covers only {short}; new changes require a new request. "
-                        f"A new AI review will still cover only the submitted commit {short}, with the same "
-                        f"scope as the latest review. Generate it again anyway?"
+                        f"A new AI review will still cover only the submitted commit {short}, which was "
+                        f"already reviewed with the {scope_label} scope ({which}). Generate it again anyway?"
                     )
                 else:
                     message = (
-                        f"Nothing has changed since the latest AI review: same commit {short} and same "
-                        f"scope. Generate it again anyway?"
+                        f"Nothing has changed since {which}: same commit {short} and same scope "
+                        f"({scope_label}). Generate it again anyway?"
                     )
                 raise HTTPException(status_code=409, detail={
                     "code": AI_REVIEW_UNCHANGED,
@@ -144,6 +152,8 @@ def trigger_ai_review(
                     "current_head": current_head,
                     "head_moved": head_moved,
                     "scope": scope.value,
+                    "matching_review_id": matched.id,
+                    "matching_review_number": number,
                 })
         review = run_ai_review(facts, scope)
     except (GitHubError, AIServiceError) as exc:

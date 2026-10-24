@@ -166,7 +166,7 @@ function AiReviewResult({ result, requestRiskLevel }) {
 
 const AI_REVIEW_UNCHANGED = "ai_review_unchanged";
 
-function UnchangedDialog({ detail, onCancel, onConfirm }) {
+function UnchangedDialog({ detail, onCancel, onConfirm, onShow }) {
   return createPortal(
     <div className="modal-overlay" onClick={onCancel}>
       <div className="confirm-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -183,6 +183,11 @@ function UnchangedDialog({ detail, onCancel, onConfirm }) {
           <button type="button" className="btn btn-secondary" onClick={onCancel}>
             Cancel
           </button>
+          {detail.matching_review_number && (
+            <button type="button" className="btn btn-secondary" onClick={onShow}>
+              Show review {detail.matching_review_number}
+            </button>
+          )}
           <button type="button" className="btn btn-primary" onClick={onConfirm}>
             Generate anyway
           </button>
@@ -323,7 +328,16 @@ export default function AiReviewSection({ request, user, onError }) {
       )}
 
       {unchanged && (
-        <UnchangedDialog detail={unchanged} onCancel={() => setUnchanged(null)} onConfirm={() => generate(true)} />
+        <UnchangedDialog
+          detail={unchanged}
+          onCancel={() => setUnchanged(null)}
+          onConfirm={() => generate(true)}
+          onShow={() => {
+            // Results are newest first: review n of N sits at index N - n.
+            setIndex(Math.min(Math.max(total - unchanged.matching_review_number, 0), total - 1));
+            setUnchanged(null);
+          }}
+        />
       )}
     </div>
   );

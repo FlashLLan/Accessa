@@ -139,4 +139,19 @@ describe("Regenerating with nothing changed", () => {
     expect(dialog.querySelector("h3").textContent).toBe("The pull request has new commits");
     expect(dialog.textContent).toContain("will still cover only the submitted commit 7c0f3b2");
   });
+
+  it("'Show review n' jumps to the earlier review with the same scope", async () => {
+    api.generateAiReview.mockRejectedValueOnce({ response: { status: 409, data: { detail: {
+      code: "ai_review_unchanged", head_moved: false, matching_review_number: 1,
+      message: "Nothing has changed since review 1 of 3: same commit c0ffee0 and same scope (Changed files). Generate it again anyway?",
+    } } } });
+    renderSection([THIRD, SECOND, FIRST]);
+    fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Show review 1" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("Review 1 of 3")).toBeTruthy();
+    expect(summary()).toBe("First review");
+    expect(api.generateAiReview).toHaveBeenCalledTimes(1);
+  });
 });

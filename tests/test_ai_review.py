@@ -557,3 +557,39 @@ def test_unchanged_dialog_still_works_when_github_fails(client, db, people, pend
     assert response.status_code == 409
     assert response.json()["detail"]["head_moved"] is False
     assert response.json()["detail"]["current_head"] is None
+
+
+def test_alternating_scopes_still_detect_an_earlier_review_with_the_same_scope(client, db, people, pending, login_user):
+    login_user(people["reviewer"])
+    ai = FakeOpenAI()
+    with mocked_services(_github(), ai):
+        assert _generate(client, pending, {"scope": "changed_files"}).status_code == 200   # review 1
+        assert _generate(client, pending, {"scope": "extended"}).status_code == 200        # review 2
+        calls = len(ai.requests)
+        changed_again = _generate(client, pending, {"scope": "changed_files"})
+        extended_again = _generate(client, pending, {"scope": "extended"})
+
+    assert changed_again.status_code == 409
+    detail = changed_again.json()["detail"]
+    assert (detail["matching_review_number"], detail["scope"]) == (1, "changed_files")
+    assert detail["message"] == (f"Nothing has changed since review 1 of 2: same commit {SHA[:7]} and same scope "
+                                 f"(Changed files). Generate it again anyway?")
+
+    assert extended_again.status_code == 409
+    detail = extended_again.json()["detail"]
+    assert (detail["matching_review_number"], detail["scope"]) == (2, "extended")
+    assert "(Extended)" in detail["message"]
+
+    assert len(ai.requests) == calls  # neither repeat called the AI
+    assert db.query(AIReviewResult).count() == 2
+
+
+def test_alternating_scopes_with_a_moved_head_generate_without_asking(client, db, people, pending, login_user):
+    # Manually entered Git data: the review covers the PR's current head.
+    login_user(people["reviewer"])
+    with mocked_services(_github(), FakeOpenAI()):
+        assert _generate(client, pending, {"scope": "changed_files"}).status_code == 200
+        assert _generate(client, pending, {"scope": "extended"}).status_code == 200
+    moved = FakeGitHub(dict(REPO), [dict(f) for f in PR_FILES], head_sha=OTHER_SHA)
+    with mocked_services(moved, FakeOpenAI()):
+        assert _generate(client, pending, {"scope": "changed_files"}).status_code == 200
