@@ -58,6 +58,7 @@ class UserDetailsResponse(BaseModel):
     email: EmailStr
     role: RoleResponse
     is_active: bool
+    mfa_enabled: bool = False  # never the secret
     created_at: datetime
     stats: UserStatsResponse
 

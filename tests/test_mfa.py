@@ -626,3 +626,14 @@ def test_failed_audit_write_does_not_enable_mfa(client, db, app_db_engine, peopl
     with app_db_engine.connect() as conn:
         assert conn.execute(text("SELECT mfa_enabled FROM users WHERE id = :id"),
                             {"id": people["mid"].id}).scalar() is False
+
+
+def test_user_list_and_details_report_mfa_status(client, db, people, login_user):
+    _enrol(db, people["mid"])
+    login_user(people["admin"])
+    listed = {u["email"]: u["mfa_enabled"] for u in client.get("/users/").json()}
+    assert listed[people["mid"].email] is True and listed[people["junior"].email] is False
+
+    details = client.get(f"/users/{people['mid'].id}/details").json()
+    assert details["mfa_enabled"] is True
+    assert "mfa_secret" not in str(details)

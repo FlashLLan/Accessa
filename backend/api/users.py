@@ -631,6 +631,7 @@ def get_user_details(
         "email": user.email,
         "role": user.role,
         "is_active": user.is_active,
+        "mfa_enabled": user.mfa_enabled,
         "created_at": user.created_at,
         "stats": {
             "total_requests_created": total_requests_created or 0,

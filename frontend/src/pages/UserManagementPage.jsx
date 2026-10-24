@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Toast from "../components/common/Toast";
 import { useAuth } from "../hooks/useAuth";
@@ -21,6 +21,7 @@ function normalizeApiUser(user) {
     full_name: user.full_name,
     email: user.email,
     is_active: user.is_active,
+    mfa_enabled: Boolean(user.mfa_enabled),
     created_at: user.created_at,
     role: user.role,
   };
@@ -60,6 +61,14 @@ export default function UserManagementPage() {
   const [sortOrder, setSortOrder] = useState("asc");
   const [statusFilter, setStatusFilter] = useState("all");
   const [detailsUser, setDetailsUser] = useState(null);
+  // The details panel sits above the table: bring it into view when it opens.
+  const detailsRef = useRef(null);
+
+  useEffect(() => {
+    if (detailsUser) {
+      detailsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+  }, [detailsUser]);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   const [createForm, setCreateForm] = useState({
@@ -347,7 +356,11 @@ const handleResetMfa = (targetUser) => {
       setSubmitting(true);
       try {
         await resetUserMfa(targetUser.id);
-        setToast({ message: `MFA reset for ${targetUser.full_name}.`, type: "success" });
+        setToast({
+          message: `MFA reset for ${targetUser.full_name}. They will set it up again at their next login.`,
+          type: "success",
+        });
+        setDetailsUser((open) => (open?.id === targetUser.id ? { ...open, mfa_enabled: false } : open));
         await loadData();
       } catch (err) {
         console.error("Failed to reset MFA", err);
@@ -532,7 +545,7 @@ const handleResetMfa = (targetUser) => {
         {detailsLoading && <div className="empty-state">Loading user details...</div>}
 
         {detailsUser && (
-            <div className="details-section">
+            <div className="details-section" ref={detailsRef}>
               <div className="page-header-row">
                 <div>
                   <h3 className="details-section-title">User Details</h3>
@@ -588,6 +601,11 @@ const handleResetMfa = (targetUser) => {
                 <div className="detail-box">
                   <span className="detail-label">Status</span>
                   <strong>{detailsUser.is_active ? "Active" : "Inactive"}</strong>
+                </div>
+
+                <div className="detail-box">
+                  <span className="detail-label">Two-factor authentication</span>
+                  <strong>{detailsUser.mfa_enabled ? "Enrolled" : "Not set up"}</strong>
                 </div>
               </div>
             </div>
