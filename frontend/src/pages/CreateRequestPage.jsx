@@ -28,6 +28,13 @@ const initialGitForm = {
   diff_text: "",
 };
 
+// Same shape the backend accepts for fetching at submission (github.com/<owner>/<repo>/pull/<n>).
+const GITHUB_PR_URL = /^https:\/\/(www\.)?github\.com\/[^/\s]+\/[^/\s]+\/pull\/[1-9]\d*(\/|[?#]|$)/;
+
+function isGithubPullRequest(url) {
+  return GITHUB_PR_URL.test((url || "").trim());
+}
+
 export default function CreateRequestPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -347,7 +354,19 @@ export default function CreateRequestPage() {
                   onChange={handleGitChange}
                   placeholder="https://github.com/org/repo/pull/42 or https://gitlab.com/org/repo/-/merge_requests/7"
                 />
+                <span className="form-hint">
+                  With a public github.com pull request link, the commit, the list of changed
+                  files and the diff are fetched from GitHub automatically when you submit the
+                  request. Values typed below are replaced, and the submission fails if GitHub
+                  cannot be read (e.g. a private repository).
+                </span>
               </div>
+
+              {isGithubPullRequest(gitForm.pull_request_url) && (
+                <p className="git-context-hint">
+                  The fields below will be filled in from GitHub at submission.
+                </p>
+              )}
 
               <div className="form-group">
                 <label htmlFor="gc_changed_files_summary">Changed files summary</label>

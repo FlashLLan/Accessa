@@ -20,6 +20,7 @@ from backend.services import related_files
 from backend.services.ai_review_prompt import OUTPUT_SCHEMA, PROMPT_VERSION, SYSTEM_PROMPT
 from backend.services.github_service import MAX_FILE_BYTES, GitHubClient, PullRequestSnapshot
 from backend.services.openai_client import AIServiceError, OpenAIClient
+from backend.services.pull_request_data import stored_files, stored_total
 from backend.services.secret_masking import mask_secret_values
 
 MAX_INPUT_CHARS = 120_000   # about 30k tokens; the whole user message must fit
@@ -41,6 +42,11 @@ class RequestFacts:
     branch_name: str | None
     target_branch: str | None
     pull_request_url: str
+    # Set when the Git data was fetched from GitHub at submission: the review then
+    # reads the files at this commit, not at the PR's current head.
+    submitted_commit: str | None = None
+    submitted_diff: str | None = None
+    submitted_summary: str | None = None
 
 
 @dataclass
@@ -53,6 +59,7 @@ class ReviewInput:
     changed_files_total: int = 0
     input_truncated: bool = False
     secrets_masked: int = 0
+    head_moved: bool = False          # the PR has new commits since submission
 
 
 class AIReviewOutput(BaseModel):
@@ -171,6 +178,11 @@ def _metadata_block(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: A
         + (f" (only the first {len(snapshot.files)} are included)" if snapshot.files_truncated else ""),
         f"Review scope: {scope.value}",
     ]
+    if snapshot.current_head_sha and snapshot.current_head_sha != snapshot.head_sha:
+        lines.append(
+            f"Note: the pull request has new commits since submission (now at {snapshot.current_head_sha}); "
+            f"this review covers the submitted commit {snapshot.head_sha}."
+        )
     return "\n".join(lines)
 
 
@@ -258,6 +270,35 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
 
 # --- the whole review ---------------------------------------------------------------------------------
 
+HEAD_MOVED_FLAG = "The pull request has new commits since submission"
+
+
+def _submitted_snapshot(github: GitHubClient, facts: RequestFacts) -> PullRequestSnapshot:
+    """The PR as submitted: files and patches from the stored diff, full contents
+    read at the stored commit. One extra request tells whether the head moved."""
+    ref, pr, current_head = github.pull_request(facts.pull_request_url)
+    files = stored_files(facts.submitted_diff)
+    for f in files:
+        if f.status == "removed":
+            f.skipped_reason = "removed"
+        else:
+            f.content, f.skipped_reason = github.get_file(ref.owner, ref.repo, f.path, facts.submitted_commit)
+    total = stored_total(facts.submitted_summary, len(files))
+    return PullRequestSnapshot(
+        owner=ref.owner,
+        repo=ref.repo,
+        number=ref.number,
+        title=pr.get("title") or "",
+        head_sha=facts.submitted_commit,
+        base_ref=(pr.get("base") or {}).get("ref"),
+        head_ref=(pr.get("head") or {}).get("ref"),
+        files=files,
+        files_truncated=total > len(files),
+        changed_files_total=total,
+        current_head_sha=current_head,
+    )
+
+
 def run_ai_review(facts: RequestFacts, scope: AIReviewScope,
                   github: GitHubClient | None = None, ai: OpenAIClient | None = None) -> AIReview:
     """Raises GitHubError or AIServiceError (both carry status_code and a safe message)."""
@@ -267,13 +308,17 @@ def run_ai_review(facts: RequestFacts, scope: AIReviewScope,
     own_client = github is None
     github = github or GitHubClient()
     try:
-        snapshot = github.fetch_pull_request(facts.pull_request_url)
+        if facts.submitted_commit:
+            snapshot = _submitted_snapshot(github, facts)
+        else:  # Git data entered manually: the PR as it is now
+            snapshot = github.fetch_pull_request(facts.pull_request_url)
         extra = _related(github, snapshot) if scope is AIReviewScope.EXTENDED else []
     finally:
         if own_client:
             github.close()
 
     review_input = build_input(facts, snapshot, scope, extra)
+    review_input.head_moved = bool(snapshot.current_head_sha and snapshot.current_head_sha != snapshot.head_sha)
     raw = ai.complete_json(SYSTEM_PROMPT, review_input.text, OUTPUT_SCHEMA, "ai_review")
     try:
         output = AIReviewOutput.model_validate(raw)
@@ -282,4 +327,6 @@ def run_ai_review(facts: RequestFacts, scope: AIReviewScope,
 
     if review_input.secrets_masked:
         output.red_flags.insert(0, f"{review_input.secrets_masked} hard-coded secret(s) detected and masked")
+    if review_input.head_moved:
+        output.red_flags.insert(0, HEAD_MOVED_FLAG)
     return AIReview(input=review_input, output=output, model_name=ai.model)

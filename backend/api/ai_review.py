@@ -7,7 +7,7 @@ from database.db import get_db
 from backend.core.limiter import limiter
 from backend.models.change_request import ChangeRequest
 from backend.models.ai_review_result import AIReviewResult
-from backend.models.enums import RequestStatus
+from backend.models.enums import GitContextSource, RequestStatus
 from backend.core.dependencies import get_current_user, get_current_workspace_id, get_request_or_404, ClientInfo, get_client_info
 from backend.models.user import User
 from backend.schemas.ai_review_result import AIReviewResultResponse, AIReviewTrigger
@@ -90,6 +90,10 @@ def trigger_ai_review(
         branch_name=git.branch_name,
         target_branch=git.target_branch,
         pull_request_url=git.pull_request_url,
+        # Fetched from GitHub at submission: review that commit, not the current head.
+        submitted_commit=git.commit_hash if git.source == GitContextSource.GITHUB else None,
+        submitted_diff=git.diff_text if git.source == GitContextSource.GITHUB else None,
+        submitted_summary=git.changed_files_summary if git.source == GitContextSource.GITHUB else None,
     )
     # GitHub and the AI can take up to a minute: do not keep a transaction open.
     db.rollback()

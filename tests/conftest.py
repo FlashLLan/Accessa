@@ -349,3 +349,23 @@ def seed_change_request():
         db.refresh(req)
         return req
     return _seed_change_request
+
+# --- no real GitHub traffic ---------------------------------------------------------
+# Every GitHubClient created without an explicit transport (submission fetch, AI
+# review) gets one that refuses all requests, so a test can never reach
+# api.github.com. Tests that need GitHub pass a fake (tests/ai_review_helpers.py).
+
+@pytest.fixture(autouse=True)
+def block_real_github(monkeypatch):
+    import httpx
+    from backend.services import github_service
+
+    def refuse(request):
+        raise httpx.ConnectError("real GitHub access is blocked in tests", request=request)
+
+    original_init = github_service.GitHubClient.__init__
+
+    def init(self, token=None, transport=None):
+        original_init(self, token=token, transport=transport or httpx.MockTransport(refuse))
+
+    monkeypatch.setattr(github_service.GitHubClient, "__init__", init)

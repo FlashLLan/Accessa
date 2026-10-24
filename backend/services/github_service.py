@@ -97,6 +97,8 @@ class PullRequestSnapshot:
     files: list[ChangedFile] = field(default_factory=list)
     files_truncated: bool = False    # the PR has more than MAX_CHANGED_FILES files
     changed_files_total: int = 0     # as reported by GitHub; may exceed len(files)
+    # The PR's head right now, when head_sha is an older (submitted) commit.
+    current_head_sha: str | None = None
 
 
 # --- URL parsing ------------------------------------------------------------------------
@@ -235,14 +237,20 @@ class GitHubClient:
         except UnicodeDecodeError:
             return None, "binary"
 
-    def fetch_pull_request(self, url: str) -> PullRequestSnapshot:
+    def pull_request(self, url: str) -> tuple[PullRequestRef, dict, str]:
+        """The PR's metadata and its current head commit SHA (one API request)."""
         ref = parse_pull_request_url(url)
-        base = f"/repos/{ref.owner}/{ref.repo}"
-
-        pr = self._send("GET", f"{base}/pulls/{ref.number}").json()
+        pr = self._send("GET", f"/repos/{ref.owner}/{ref.repo}/pulls/{ref.number}").json()
         head_sha = (pr.get("head") or {}).get("sha")
         if not head_sha or not re.fullmatch(r"[0-9a-f]{40}", head_sha):
             raise GitHubUnavailable("GitHub returned a pull request without a head commit.")
+        return ref, pr, head_sha
+
+    def fetch_pull_request(self, url: str, *, with_contents: bool = True) -> PullRequestSnapshot:
+        """Head commit, changed files and patches; with_contents=False skips reading
+        each file's full content (one request per file), e.g. at submission."""
+        ref, pr, head_sha = self.pull_request(url)
+        base = f"/repos/{ref.owner}/{ref.repo}"
 
         listed = self._send(
             "GET", f"{base}/pulls/{ref.number}/files", params={"per_page": MAX_CHANGED_FILES, "page": 1}
@@ -264,6 +272,8 @@ class GitHubClient:
             )
             if changed.status == "removed":
                 changed.skipped_reason = "removed"  # no content at the head commit
+            elif not with_contents:
+                changed.skipped_reason = "not_fetched"
             else:
                 changed.content, changed.skipped_reason = self.get_file(ref.owner, ref.repo, changed.path, head_sha)
             files.append(changed)

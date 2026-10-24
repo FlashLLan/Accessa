@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from backend.models.enums import GitContextSource
 from backend.services.secret_masking import mask_secrets
 
 _SECRET_PATTERNS = [
@@ -103,6 +104,10 @@ class GitContextResponse(BaseModel):
     pull_request_url: str | None = None  # pull request or merge request URL
     changed_files_summary: str | None = None
     diff_text: str | None = None
+    # "github": fetched from the pull request at submission; "manual": entered by
+    # the requester, not verified.
+    source: GitContextSource = GitContextSource.MANUAL
+    fetched_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

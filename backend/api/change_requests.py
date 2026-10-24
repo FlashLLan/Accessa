@@ -24,6 +24,9 @@ from backend.core.dependencies import (
     get_user_or_404,
 )
 from backend.api.git_context import format_identifiers
+from backend.models.enums import GitContextSource
+from backend.services.github_service import GitHubError
+from backend.services.pull_request_data import fetch_for_submission, is_github_pull_request
 from backend.services.audit_service import log_action
 from backend.core.timeutils import utc_now
 from backend.services.approval_service import can_user_decide_request
@@ -379,22 +382,62 @@ def submit_change_request(
     workspace_id: int = Depends(get_current_workspace_id),
     client: ClientInfo = Depends(get_client_info),
 ):
+    def check(cr: ChangeRequest) -> None:
+        # Only the author may change or submit their own request; admins have no exception
+        # here, so an admin cannot alter or push someone else's draft into review.
+        if cr.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Only the creator can submit this request")
+        if cr.status != RequestStatus.DRAFT:
+            raise HTTPException(status_code=400, detail="Only draft requests can be submitted for review")
+
+    # 1. Checks without a lock, so a request that cannot be submitted fails fast.
+    change_request = get_request_or_404(db, workspace_id, request_id)
+    check(change_request)
+    pr_url = change_request.git_context.pull_request_url if change_request.git_context else None
+
+    # 2. With a GitHub pull request link: fetch commit, file list and diff (FR-21)
+    #    before any lock or write transaction is held. A failure refuses the
+    #    submission and changes nothing.
+    fetched = None
+    if is_github_pull_request(pr_url):
+        db.rollback()  # end the read transaction; GitHub may take a few seconds
+        try:
+            fetched = fetch_for_submission(pr_url)
+        except GitHubError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
+
+    # 3. Lock the row and re-check: the request may have changed meanwhile.
     change_request = get_request_or_404(db, workspace_id, request_id, for_update=True)
+    check(change_request)
+    git = change_request.git_context
+    if fetched is not None and (git is None or git.pull_request_url != pr_url):
+        raise HTTPException(status_code=409, detail="The Git context changed during submission; submit again")
 
-    # Only the author may change or submit their own request; admins have no exception
-    # here, so an admin cannot alter or push someone else's draft into review.
-    if change_request.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the creator can submit this request")
-
-    if change_request.status != RequestStatus.DRAFT:
-        raise HTTPException(
-            status_code=400,
-            detail="Only draft requests can be submitted for review"
-        )
+    if fetched is not None:
+        # Replaces whatever the requester pasted.
+        git.commit_hash = fetched.commit_hash
+        git.changed_files_summary = fetched.changed_files_summary
+        git.diff_text = fetched.diff_text
+        git.source = GitContextSource.GITHUB
+        git.fetched_at = utc_now()
+    elif git is not None:
+        git.source = GitContextSource.MANUAL
+        git.fetched_at = None
 
     change_request.status = RequestStatus.PENDING_REVIEW
     change_request.submitted_at = utc_now()
     db.flush()  # assign ids; committed together with the audit entry below
+
+    if fetched is not None:
+        submitted_details = (
+            f"Submitted for review; Git data fetched from GitHub at commit {fetched.commit_hash}"
+            + (f"; {fetched.secrets_masked} secret(s) masked" if fetched.secrets_masked else "")
+            + (f"; {fetched.files_omitted} file(s) not included" if fetched.files_omitted else "")
+        )
+    elif git is not None:
+        submitted_details = "Submitted for review; Git data entered manually (not verified)"
+    else:
+        submitted_details = "Submitted for review"
 
     log_action(
         db=db,
@@ -405,7 +448,7 @@ def submit_change_request(
         entity_type="change_request",
         entity_id=change_request.id,
         severity="medium",
-        details="Submitted for review"
+        details=submitted_details,
     )
     db.commit()
 

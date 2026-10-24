@@ -190,9 +190,11 @@ def main(argv: list[str] | None = None) -> None:
     # 1. APPLIED: junior -> mid approves -> junior applies
     r1 = create("junior@test.com", "Rotate staging database credentials", "low", "mid@test.com",
                 description="Rotate the read-only DB user password on staging.", target="staging-db",
+                # No pull request link: with one, submission fetches the PR from GitHub
+                # (it must exist and be public). This Git context stays "manual".
                 git_context={"provider": "github", "repository_name": "infra/secrets",
                              "branch_name": "rotate-staging-db", "target_branch": "main",
-                             "pull_request_url": "https://github.com/example/infra/pull/101"})
+                             "diff_text": "-DB_USER_TTL=90d\n+DB_USER_TTL=30d"})
     act("junior@test.com", r1, "submit")
     comment("mid@test.com", r1, "Checked the rotation runbook, looks fine.")
     act("mid@test.com", r1, "approve", {"decision_comment": "Low risk, approved."})

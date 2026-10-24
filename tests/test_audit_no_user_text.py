@@ -1,5 +1,11 @@
 """Text that users write never ends up in audit_logs; it stays in its own table."""
+from unittest.mock import patch
+
+import httpx
 import pytest
+
+from ai_review_helpers import PR_URL, FakeGitHub
+from backend.services.github_service import GitHubClient
 
 from backend.models.approval import Approval
 from backend.models.audit_log import AuditLog
@@ -71,14 +77,18 @@ def test_no_user_written_text_in_any_audit_entry(client, db, people, login_user)
         "provider": "github", "repository_name": f"repo-{MARK}", "branch_name": "feature/x",
         "target_branch": "main", "commit_hash": "abc1234",
         "repository_url": "https://github.com/octo/demo",
-        "pull_request_url": "https://github.com/octo/demo/pull/1",
+        "pull_request_url": PR_URL,
         "changed_files_summary": f"files {MARK}", "diff_text": f"+{MARK}",
     })
     assert client.patch(f"/change-requests/{request_id}",
                         json={"title": f"New title {MARK}", "description": f"New description {MARK}"}).status_code == 200
     assert client.post(f"/change-requests/{request_id}/git-context",
                        json={"branch_name": "feature/y", "diff_text": f"-{MARK}"}).status_code == 200
-    assert client.post(f"/change-requests/{request_id}/submit").status_code == 200
+    # Submission fetches the PR from (fake) GitHub.
+    github = FakeGitHub({"a.py": b"x = 1\n"}, [{"filename": "a.py", "status": "modified", "patch": "@@ -1 +1 @@\n+x = 1"}])
+    with patch("backend.services.pull_request_data.GitHubClient",
+               lambda: GitHubClient(token="", transport=httpx.MockTransport(github))):
+        assert client.post(f"/change-requests/{request_id}/submit").status_code == 200
     assert client.post(f"/change-requests/{request_id}/comments",
                        json={"comment_text": f"Comment {MARK}"}).status_code == 200
     assert client.put("/users/me", json={"full_name": f"Junior {MARK}"}).status_code == 200

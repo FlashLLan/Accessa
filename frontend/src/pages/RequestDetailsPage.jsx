@@ -113,6 +113,14 @@ function GitContextCard({ git }) {
         )}
       </div>
 
+      {(git.diff_text || git.changed_files_summary) && (
+        <p className={`git-provenance ${git.source === "github" ? "git-provenance-verified" : ""}`}>
+          {git.source === "github"
+            ? `Fetched from GitHub at commit ${(git.commit_hash || "").slice(0, 7)} (${formatDate(git.fetched_at)})`
+            : "Entered by the requester, not verified"}
+        </p>
+      )}
+
       {git.changed_files_summary && (
         <div style={{ marginBottom: "12px" }}>
           <span className="detail-label">Changed files</span>

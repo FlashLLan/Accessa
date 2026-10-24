@@ -27,7 +27,12 @@ class FakeGitHub:
     """A public repository `octo/demo` with PR #7 at SHA. `repo` maps path -> bytes
     at SHA; `pr_files` is the PR files API answer."""
 
-    def __init__(self, repo: dict[str, bytes], pr_files: list[dict], *, changed_files_total=None, fail=None):
+    def __init__(self, repo: dict[str, bytes], pr_files: list[dict], *, changed_files_total=None, fail=None,
+                 head_sha=SHA, content_ref=None):
+        # head_sha: the PR's current head. content_ref: the commit the repository
+        # files are served at (default: the head).
+        self.head_sha = head_sha
+        self.content_ref = content_ref or head_sha
         self.repo = repo
         self.pr_files = pr_files
         self.changed_files_total = len(pr_files) if changed_files_total is None else changed_files_total
@@ -42,18 +47,18 @@ class FakeGitHub:
         base = "/repos/octo/demo"
         if path == f"{base}/pulls/7":
             return httpx.Response(200, json={
-                "title": "Exporter retry", "head": {"sha": SHA, "ref": "feature/retry"},
+                "title": "Exporter retry", "head": {"sha": self.head_sha, "ref": "feature/retry"},
                 "base": {"ref": "main"}, "changed_files": self.changed_files_total,
             })
         if path == f"{base}/pulls/7/files":
             return httpx.Response(200, json=self.pr_files)
-        if path == f"{base}/git/trees/{SHA}":
+        if path == f"{base}/git/trees/{self.content_ref}":
             return httpx.Response(200, json={"truncated": False, "tree": [
                 {"path": p, "type": "blob", "size": len(c)} for p, c in self.repo.items()
             ]})
         if path.startswith(f"{base}/contents/"):
             name = path[len(f"{base}/contents/"):]
-            if request.url.params.get("ref") == SHA and name in self.repo:
+            if request.url.params.get("ref") == self.content_ref and name in self.repo:
                 return httpx.Response(200, content=self.repo[name])
         return httpx.Response(404, json={"message": "Not Found"})
 

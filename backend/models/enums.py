@@ -56,3 +56,10 @@ class AIReviewScope(str, enum.Enum):
     # also the files they import / are imported by and top-level config files.
     CHANGED_FILES = "changed_files"
     EXTENDED = "extended"
+
+
+class GitContextSource(str, enum.Enum):
+    # GITHUB: commit, file list and diff fetched from the pull request at submission.
+    # MANUAL: entered by the requester, not verified.
+    GITHUB = "github"
+    MANUAL = "manual"
