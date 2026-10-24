@@ -89,7 +89,8 @@ def create_change_request(
         entity_type="change_request",
         entity_id=new_request.id,
         severity="low",
-        details=f"Created request '{new_request.title}' assigned to reviewer_id={new_request.assigned_reviewer_id}"
+        # No title: user-written text stays in change_requests, not in the audit log.
+        details=f"Created request assigned to reviewer_id={new_request.assigned_reviewer_id}"
     )
 
     if request_data.git_context is not None and request_data.git_context.has_any_data():
@@ -109,12 +110,8 @@ def create_change_request(
             entity_id=new_request.id,
             request_id=new_request.id,
             severity="low",
-            details=(
-                f"Git context linked: "
-                f"repo={gc.repository_url or '-'}, "
-                f"branch={gc.branch_name or '-'}, "
-                f"commit={gc.commit_hash or '-'}"
-            ),
+            # Which fields were set, not their (user-entered) values.
+            details=f"Git context linked: fields={','.join(gc.model_dump(exclude_none=True)) or '-'}",
         )
 
     db.commit()
@@ -211,7 +208,8 @@ def approve_change_request(
             f"Approved | approver_role={current_user.role.name} | "
             f"requester_role={change_request.creator.role.name} | "
             f"risk_level={change_request.risk_level.value} | "
-            f"comment={action.decision_comment or 'none'}"
+            # Only whether a comment was given: its text stays in the approvals table.
+            f"comment={'yes' if (action.decision_comment or '').strip() else 'no'}"
         )
     )
     db.commit()
@@ -275,7 +273,8 @@ def reject_change_request(
             f"Rejected | approver_role={current_user.role.name} | "
             f"requester_role={change_request.creator.role.name} | "
             f"risk_level={change_request.risk_level.value} | "
-            f"comment={action.decision_comment or 'none'}"
+            # Only whether a comment was given: its text stays in the approvals table.
+            f"comment={'yes' if (action.decision_comment or '').strip() else 'no'}"
         )
     )
     db.commit()

@@ -70,11 +70,10 @@ def upsert_git_context(
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,
+        # Which fields were sent, not their (user-entered) values: those stay in git_context.
         details=(
             f"Git context {'updated' if audit_action == 'GIT_CONTEXT_UPDATED' else 'linked'}: "
-            f"repo={payload.repository_url or '-'}, "
-            f"branch={payload.branch_name or '-'}, "
-            f"commit={payload.commit_hash or '-'}"
+            f"fields={','.join(payload.model_dump(exclude_unset=True)) or '-'}"
         ),
     )
     # Git context and its audit entry are committed together.
