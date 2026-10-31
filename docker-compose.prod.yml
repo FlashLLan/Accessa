@@ -6,7 +6,8 @@
 # Only Caddy publishes ports (80, 443). Docker-published ports bypass ufw, so
 # nothing else may publish one: PostgreSQL and the backend are reachable only
 # on the private networks below.
-name: accessa
+# Own project name: never collides with the local dev compose project ("accessa").
+name: accessa-prod
 
 # Container logs are capped (default json-file logs grow without limit).
 x-logging: &logging

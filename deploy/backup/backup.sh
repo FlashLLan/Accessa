@@ -9,6 +9,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-.env.production}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/accessa}"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
@@ -18,11 +19,11 @@ umask 077
 mkdir -p "$BACKUP_DIR"
 cd "$REPO_DIR"
 
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
+docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml exec -T postgres \
     pg_dump --username=postgres --dbname=accessa --format=custom --compress=6 > "$TARGET.partial"
 
 # A dump that cannot be listed is not a backup.
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
+docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml exec -T postgres \
     pg_restore --list < "$TARGET.partial" > /dev/null
 mv "$TARGET.partial" "$TARGET"
 

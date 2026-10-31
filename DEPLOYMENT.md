@@ -19,6 +19,10 @@ Internet ──443/80──▶ caddy ──/api/*──▶ backend ──▶ pos
 - **Client IP:** Caddy replaces any client-supplied `X-Forwarded-For` with the real address. uvicorn (`--proxy-headers --forwarded-allow-ips=172.30.0.10`) accepts it only from Caddy, so the rate limiter and the audit log see the real client IP.
 - **Secrets:** they live only in `.env.production` on the server. The backend never gets `MIGRATION_DATABASE_URL`; migrations are a one-off command (step 4), and the app refuses to start in production if that variable is set.
 
+The Compose project is called `accessa-prod` (containers `accessa-prod-<service>-1`,
+volumes `accessa-prod_pgdata`, ...), so it never collides with the local
+development project `accessa`.
+
 All commands below run on the server as the deploy user, from the repository
 directory, with this alias:
 
@@ -233,6 +237,9 @@ deploy/backup/backup.sh                     # first run by hand
 crontab -e                                  # as deploy, add:
 # 15 3 * * * cd /home/deploy/accessa && deploy/backup/backup.sh >> /var/backups/accessa/backup.log 2>&1
 ```
+
+Both scripts read `ENV_FILE` (default `.env.production`), `BACKUP_DIR` (default
+`/var/backups/accessa`) and, for `backup.sh`, `BACKUP_KEEP_DAYS` (default 14).
 
 A backup on the same server does not survive the loss of the server. Copy the
 dumps elsewhere regularly, e.g. from your own machine:
