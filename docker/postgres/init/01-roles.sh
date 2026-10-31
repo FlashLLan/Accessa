@@ -2,8 +2,9 @@
 # Creates the two Accessa database roles (runs once, on an empty data volume).
 #
 #   accessa_owner  owns the database and schema; Alembic migrations run as this role
-#                  (MIGRATION_DATABASE_URL). CREATEDB lets the test suite create a
-#                  throwaway test database.
+#                  (MIGRATION_DATABASE_URL). CREATEDB only if ACCESSA_OWNER_CREATEDB=true:
+#                  set by the local docker-compose.yml so the test suite can create a
+#                  throwaway test database; never in production (docker-compose.prod.yml).
 #   accessa_app    the running application (DATABASE_URL). Gets SELECT/INSERT/UPDATE/DELETE
 #                  on tables the owner creates, and USAGE on sequences. The audit_logs
 #                  table is narrowed to SELECT/INSERT by an Alembic migration, so the
@@ -15,9 +16,13 @@ psql -v ON_ERROR_STOP=1 \
      --dbname "$POSTGRES_DB" \
      -v db="$POSTGRES_DB" \
      -v owner_pw="$ACCESSA_OWNER_PASSWORD" \
-     -v app_pw="$ACCESSA_APP_PASSWORD" <<'SQL'
-CREATE ROLE accessa_owner LOGIN CREATEDB PASSWORD :'owner_pw';
-CREATE ROLE accessa_app   LOGIN          PASSWORD :'app_pw';
+     -v app_pw="$ACCESSA_APP_PASSWORD" \
+     -v owner_createdb="${ACCESSA_OWNER_CREATEDB:-false}" <<'SQL'
+CREATE ROLE accessa_owner LOGIN NOCREATEDB PASSWORD :'owner_pw';
+CREATE ROLE accessa_app   LOGIN NOCREATEDB PASSWORD :'app_pw';
+\if :owner_createdb
+ALTER ROLE accessa_owner CREATEDB;
+\endif
 
 ALTER DATABASE :"db" OWNER TO accessa_owner;
 ALTER SCHEMA public OWNER TO accessa_owner;

@@ -12,6 +12,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-accessa}
       ACCESSA_OWNER_PASSWORD: ${ACCESSA_OWNER_PASSWORD:?set ACCESSA_OWNER_PASSWORD in .env}
       ACCESSA_APP_PASSWORD: ${ACCESSA_APP_PASSWORD:?set ACCESSA_APP_PASSWORD in .env}
+      # Local development only: the test suite creates a throwaway database.
+      ACCESSA_OWNER_CREATEDB: "true"
     ports:
       - "5432:5432"
     volumes:

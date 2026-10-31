@@ -1,0 +1,120 @@
+# Accessa production on a single server: PostgreSQL, backend, Caddy (frontend + HTTPS).
+# See DEPLOYMENT.md. Run with the server-only secrets file:
+#
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+#
+# Only Caddy publishes ports (80, 443). Docker-published ports bypass ufw, so
+# nothing else may publish one: PostgreSQL and the backend are reachable only
+# on the private networks below.
+name: accessa
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: accessa
+      # Read by docker/postgres/init/01-roles.sh on the first start (empty volume).
+      # ACCESSA_OWNER_CREATEDB is deliberately not set: no CREATEDB in production.
+      ACCESSA_OWNER_PASSWORD: ${ACCESSA_OWNER_PASSWORD:?set ACCESSA_OWNER_PASSWORD in .env.production}
+      ACCESSA_APP_PASSWORD: ${ACCESSA_APP_PASSWORD:?set ACCESSA_APP_PASSWORD in .env.production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d accessa"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # no "ports": never reachable from outside the server
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: accessa-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Only what the application needs. Not the owner or superuser passwords, and
+    # never MIGRATION_DATABASE_URL (the app refuses to start with it in production;
+    # migrations are a one-off `docker compose run`, see DEPLOYMENT.md).
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env.production}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env.production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY in .env.production}
+      OPENAI_MODEL: ${OPENAI_MODEL:?set OPENAI_MODEL in .env.production}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      CORS_ORIGINS: https://${ACCESSA_DOMAIN:?set ACCESSA_DOMAIN in .env.production}
+      APP_ENV: production
+      # The client address comes from uvicorn's proxy headers (trusting only Caddy,
+      # below), not from the X-Real-IP middleware used on Railway.
+      CLIENT_IP_HEADER: ""
+    # Caddy replaces X-Forwarded-For with the connecting client's address and sets
+    # X-Forwarded-Proto. uvicorn accepts those headers only from Caddy's fixed
+    # address; from anyone else they are ignored.
+    command:
+      - uvicorn
+      - backend.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --proxy-headers
+      - --forwarded-allow-ips=${CADDY_IP:-172.30.0.10}
+    networks:
+      - app
+      - db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # no "ports": only Caddy reaches it
+
+  caddy:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # The frontend calls the API on the same origin under /api.
+        VITE_API_URL: https://${ACCESSA_DOMAIN:?set ACCESSA_DOMAIN in .env.production}/api
+    image: accessa-caddy
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      ACCESSA_DOMAIN: ${ACCESSA_DOMAIN:?set ACCESSA_DOMAIN in .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificates and ACME account: keep across restarts
+      - caddy_config:/config
+    networks:
+      app:
+        ipv4_address: ${CADDY_IP:-172.30.0.10}
+
+networks:
+  # Caddy <-> backend. Fixed subnet so the backend can trust exactly Caddy's address.
+  app:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${APP_SUBNET:-172.30.0.0/24}
+  # backend <-> PostgreSQL only; internal: no route to the outside world.
+  db:
+    driver: bridge
+    internal: true
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
