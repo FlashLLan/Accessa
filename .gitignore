@@ -8,8 +8,11 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Environment variables
+# Environment variables (secrets): .env, .env.production, ... in any directory.
 .env
+.env.*
+!.env.example
+!.env.production.example
 
 # PyCharm / IDE files
 .idea/
