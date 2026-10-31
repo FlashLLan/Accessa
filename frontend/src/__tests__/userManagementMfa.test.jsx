@@ -1,4 +1,4 @@
-// User Management: MFA status, Reset MFA with toast messages, Details in view.
+// User Management: MFA status, Reset MFA with toast messages, expandable Details row.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -81,16 +81,40 @@ describe("MFA in User Management", () => {
     expect(toast.textContent).toContain("You cannot reset your own MFA");
   });
 
-  it("Details opens the panel with the MFA status and scrolls it into view", async () => {
+  it("Details expands a row under the user, scrolls it into view, and hides it again", async () => {
     const scroll = vi.fn();
     window.HTMLElement.prototype.scrollIntoView = scroll;
     api.getUserDetails.mockResolvedValue({ ...SAM, stats: {} });
     renderPage();
-    fireEvent.click(within(await row("Sam Senior")).getByRole("button", { name: "Details" }));
+    const samRow = await row("Sam Senior");
+    fireEvent.click(within(samRow).getByRole("button", { name: "Details" }));
 
-    const panel = (await screen.findByText("User Details")).closest(".details-section");
-    expect(within(panel).getByText("Two-factor authentication").nextSibling.textContent).toBe("Enrolled");
+    // The details row comes directly after Sam's row.
+    const toggle = await within(samRow).findByRole("button", { name: "Hide details" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const detailsRow = samRow.nextElementSibling;
+    expect(detailsRow.className).toBe("user-details-row");
+    expect(toggle.getAttribute("aria-controls")).toBe(detailsRow.id);
+    expect(within(detailsRow).getByText("MFA").nextSibling.textContent).toBe("Enrolled");
     await waitFor(() => expect(scroll).toHaveBeenCalled());
-    expect(scroll.mock.contexts.at(-1)).toBe(panel);
+    expect(scroll.mock.contexts.at(-1)).toBe(detailsRow);
+
+    fireEvent.click(toggle);
+    expect(within(samRow).getByRole("button", { name: "Details" }).getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector(".user-details-row")).toBeNull();
+    expect(api.getUserDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it("opening another user's details closes the first", async () => {
+    api.getUserDetails.mockImplementation(async (id) => ({ ...(id === 4 ? SAM : SOFIA), stats: {} }));
+    renderPage();
+    fireEvent.click(within(await row("Sam Senior")).getByRole("button", { name: "Details" }));
+    await within(await row("Sam Senior")).findByRole("button", { name: "Hide details" });
+    fireEvent.click(within(await row("Sofia Senior")).getByRole("button", { name: "Details" }));
+
+    await within(await row("Sofia Senior")).findByRole("button", { name: "Hide details" });
+    expect(document.querySelectorAll(".user-details-row")).toHaveLength(1);
+    expect((await row("Sofia Senior")).nextElementSibling.className).toBe("user-details-row");
+    expect(within(await row("Sam Senior")).getByRole("button", { name: "Details" })).toBeTruthy();
   });
 });

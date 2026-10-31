@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Toast from "../components/common/Toast";
 import { useAuth } from "../hooks/useAuth";
@@ -62,15 +62,17 @@ export default function UserManagementPage() {
   const [sortOrder, setSortOrder] = useState("asc");
   const [statusFilter, setStatusFilter] = useState("all");
   const [detailsUser, setDetailsUser] = useState(null);
-  // The details panel sits above the table: bring it into view when it opens.
+  // The details open as an expandable row under the user; if that row is
+  // below the visible area, scroll just enough to show it.
   const detailsRef = useRef(null);
 
   useEffect(() => {
     if (detailsUser) {
-      detailsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      detailsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
     }
   }, [detailsUser]);
-  const [detailsLoading, setDetailsLoading] = useState(false);
+  // Id of the user whose details are being fetched.
+  const [detailsLoadingId, setDetailsLoadingId] = useState(null);
 
   const [createForm, setCreateForm] = useState({
     full_name: "",
@@ -373,8 +375,13 @@ const handleResetMfa = (targetUser) => {
       : "status-badge status-inactive";
   };
 
-  const handleShowDetails = async (targetUser) => {
-  setDetailsLoading(true);
+  // Details toggles the expandable row under the user: open (fetch), or hide.
+  const handleToggleDetails = async (targetUser) => {
+  if (detailsUser?.id === targetUser.id) {
+    setDetailsUser(null);
+    return;
+  }
+  setDetailsLoadingId(targetUser.id);
 
   try {
     const data = await getUserDetails(targetUser.id);
@@ -386,7 +393,7 @@ const handleResetMfa = (targetUser) => {
       type: "error",
     });
   } finally {
-    setDetailsLoading(false);
+    setDetailsLoadingId(null);
   }
 };
 
@@ -531,76 +538,6 @@ const handleResetMfa = (targetUser) => {
           </select>
         </div>
 
-        {detailsLoading && <div className="empty-state">Loading user details...</div>}
-
-        {detailsUser && (
-            <div className="details-section" ref={detailsRef}>
-              <div className="page-header-row">
-                <div>
-                  <h3 className="details-section-title">User Details</h3>
-                  <p className="page-subtitle">
-                    Summary for {detailsUser.full_name}
-                  </p>
-                </div>
-                <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setDetailsUser(null)}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="details-grid">
-                <div className="detail-box">
-                  <span className="detail-label">Full name</span>
-                  <strong>{detailsUser.full_name}</strong>
-                </div>
-
-                <div className="detail-box">
-                  <span className="detail-label">Email</span>
-                  <strong>{detailsUser.email}</strong>
-                </div>
-
-                <div className="detail-box">
-                  <span className="detail-label">Role</span>
-                  <strong>{formatRole(detailsUser.role?.name)}</strong>
-                </div>
-
-                <div className="detail-box">
-                  <span className="detail-label">Created at</span>
-                  <strong>{formatDateTime(detailsUser.created_at)}</strong>
-                </div>
-
-                <div className="detail-box">
-                <span className="detail-label">Requests created</span>
-                  <strong>{detailsUser.stats?.total_requests_created ?? 0}</strong>
-                </div>
-
-                <div className="detail-box">
-                  <span className="detail-label">Requests approved</span>
-                  <strong>{detailsUser.stats?.total_requests_approved ?? 0}</strong>
-                </div>
-
-                <div className="detail-box">
-                  <span className="detail-label">Requests rejected</span>
-                  <strong>{detailsUser.stats?.total_requests_rejected ?? 0}</strong>
-                </div>
-
-                <div className="detail-box">
-                  <span className="detail-label">Status</span>
-                  <strong>{detailsUser.is_active ? "Active" : "Inactive"}</strong>
-                </div>
-
-                <div className="detail-box">
-                  <span className="detail-label">Two-factor authentication</span>
-                  <strong>{detailsUser.mfa_enabled ? "Enrolled" : "Not set up"}</strong>
-                </div>
-              </div>
-            </div>
-        )}
-
-
         {loading ? (
             <div className="empty-state">Loading users...</div>
         ) : (
@@ -621,8 +558,11 @@ const handleResetMfa = (targetUser) => {
                   const editing = editingUserId === targetUser.id;
                   const self = isSelf(targetUser);
 
+                  const showDetails = detailsUser?.id === targetUser.id;
+
                   return (
-                      <tr key={targetUser.id}>
+                    <Fragment key={targetUser.id}>
+                      <tr className={showDetails ? "user-row-expanded" : undefined}>
                         <td>
                           <div className="user-cell">
                             <div className="user-avatar">
@@ -692,10 +632,14 @@ const handleResetMfa = (targetUser) => {
                                   <button
                                       type="button"
                                       className="btn btn-secondary btn-sm"
-                                      onClick={() => handleShowDetails(targetUser)}
-                                      disabled={submitting}
+                                      onClick={() => handleToggleDetails(targetUser)}
+                                      disabled={submitting || detailsLoadingId === targetUser.id}
+                                      aria-expanded={showDetails}
+                                      aria-controls={`user-details-${targetUser.id}`}
                                   >
-                                    Details
+                                    {detailsLoadingId === targetUser.id
+                                        ? "Loading..."
+                                        : showDetails ? "Hide details" : "Details"}
                                   </button>
 
 
@@ -740,6 +684,40 @@ const handleResetMfa = (targetUser) => {
                           </div>
                         </td>
                       </tr>
+
+                      {showDetails && (
+                        <tr className="user-details-row" id={`user-details-${targetUser.id}`} ref={detailsRef}>
+                          <td colSpan={5}>
+                            <div className="details-grid">
+                            <div className="detail-box">
+                              <span className="detail-label">Created at</span>
+                              <strong>{formatDateTime(detailsUser.created_at)}</strong>
+                            </div>
+
+                            <div className="detail-box">
+                            <span className="detail-label">Requests created</span>
+                              <strong>{detailsUser.stats?.total_requests_created ?? 0}</strong>
+                            </div>
+
+                            <div className="detail-box">
+                              <span className="detail-label">Requests approved</span>
+                              <strong>{detailsUser.stats?.total_requests_approved ?? 0}</strong>
+                            </div>
+
+                            <div className="detail-box">
+                              <span className="detail-label">Requests rejected</span>
+                              <strong>{detailsUser.stats?.total_requests_rejected ?? 0}</strong>
+                            </div>
+
+                            <div className="detail-box">
+                              <span className="detail-label">MFA</span>
+                              <strong>{detailsUser.mfa_enabled ? "Enrolled" : "Not set up"}</strong>
+                            </div>
+                          </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
                 </tbody>

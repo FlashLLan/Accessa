@@ -774,6 +774,37 @@
   gap: 8px;
 }
 
+/* Expandable details row under a user (User Management). Name, e-mail, role
+   and status are already in the row above, so it shows only the rest. */
+.users-table tr.user-row-expanded td {
+  border-bottom-color: transparent;
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.users-table tr.user-details-row td {
+  padding: 4px 14px 18px;
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.users-table tbody tr.user-details-row:hover {
+  background: transparent;
+}
+
+.user-details-row .details-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.user-details-row .detail-box {
+  padding: 12px 14px;
+}
+
+.user-details-row .detail-box strong {
+  font-size: 15px;
+  white-space: nowrap;
+}
+
 .user-status-cell {
   display: flex;
   flex-wrap: wrap;
