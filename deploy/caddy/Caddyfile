@@ -1,0 +1,58 @@
+# Accessa production (docker-compose.prod.yml): HTTPS, frontend, /api -> backend.
+#
+# {$ACCESSA_DOMAIN}: the public hostname (e.g. accessa.203-0-113-5.sslip.io or
+#   accessa.duckdns.org). Caddy obtains and renews the certificate automatically
+#   (ports 80 and 443 must be reachable). With "localhost" it uses its own local CA.
+# {$ACCESSA_CSP}: the Content-Security-Policy from frontend/csp.config.js, written
+#   into the image at build time and exported by the image's start command.
+
+{
+	# No trusted_proxies: Caddy is the edge, so the client address is the TCP
+	# peer and a client-supplied X-Forwarded-For is never passed on as true.
+	admin off
+}
+
+{$ACCESSA_DOMAIN} {
+	# Every response, including the API's.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# API: /api/... -> backend /...  (prefix stripped)
+	handle_path /api/* {
+		request_body {
+			max_size 2MB
+		}
+		# reverse_proxy replaces X-Forwarded-For with the connecting client's
+		# address (incoming values from untrusted clients are dropped) and sets
+		# X-Forwarded-Proto/-Host. uvicorn trusts these only from this container.
+		# The backend sends its own security headers (CSP default-src 'none', ...).
+		reverse_proxy backend:8000 {
+			header_up -X-Real-IP
+		}
+	}
+
+	# Frontend: the Vite build, client-side routes fall back to index.html.
+	handle {
+		root * /srv
+		encode zstd gzip
+
+		header {
+			# Same policy as vite.config.js / csp.config.js, here including
+			# frame-ancestors, which only works as a header.
+			Content-Security-Policy "{$ACCESSA_CSP}"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			X-Frame-Options "DENY"
+		}
+
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /assets/*
+		header @pages Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+}

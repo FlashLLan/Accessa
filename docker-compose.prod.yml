@@ -90,6 +90,9 @@ services:
         condition: service_healthy
     environment:
       ACCESSA_DOMAIN: ${ACCESSA_DOMAIN:?set ACCESSA_DOMAIN in .env.production}
+      # Certificates and ACME state in the persistent volumes below.
+      XDG_DATA_HOME: /data
+      XDG_CONFIG_HOME: /config
     ports:
       - "80:80"
       - "443:443"

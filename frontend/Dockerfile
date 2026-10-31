@@ -24,6 +24,9 @@ COPY --from=build /app/csp-header.txt /etc/caddy/csp-header.txt
 
 # Caddy only serves files here: no admin API, no TLS (Railway's edge terminates it).
 ENV XDG_CONFIG_HOME=/tmp/caddy/config XDG_DATA_HOME=/tmp/caddy/data
+# docker-compose.prod.yml mounts volumes here for certificates (XDG_*_HOME=/data,
+# /config); a new named volume takes this ownership, so Caddy can write as nobody.
+RUN mkdir -p /data/caddy /config/caddy && chown -R nobody:nobody /data /config
 USER nobody
 
 CMD ["sh", "-c", "export ACCESSA_CSP=\"$(cat /etc/caddy/csp-header.txt)\" && test -n \"$ACCESSA_CSP\" && exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
