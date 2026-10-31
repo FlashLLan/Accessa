@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Toast from "../components/common/Toast";
 import { extractApiError } from "../utils/apiError";
 import { getAuditLogs } from "../api/auditLogs";
 import { formatDateTime } from "../utils/requestPresentation";
 import { formatRole } from "../utils/roleUtils";
+import { summarizeDetails } from "../utils/auditDetails";
 import { Link } from "react-router-dom";
 
 // Audit action codes written by the backend today. Filters are built from these
@@ -52,37 +53,18 @@ const ENTITY_LABELS = {
 // current workspace.
 const ENTITY_FILTER_OPTIONS = ["user", "change_request", "audit_log"];
 
-const ACTION_CATEGORIES = {
-  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED", "MFA_ENROLLED", "MFA_VERIFIED", "MFA_FAILED", "MFA_RESET", "MFA_LOCKED"],
-  user_management: ["USER_CREATED", "USER_DEACTIVATED", "USER_REACTIVATED", "ROLE_ASSIGNED", "ROLE_CHANGED", "PROFILE_UPDATED", "PASSWORD_CHANGED"],
-  change_requests: ["REQUEST_CREATED", "REQUEST_SUBMITTED", "REQUEST_UPDATED", "REQUEST_APPROVED", "REQUEST_REJECTED", "REQUEST_ESCALATED", "REQUEST_DELEGATED", "REQUEST_APPLIED", "COMMENT_CREATED"],
-  git: ["GIT_CONTEXT_LINKED", "GIT_CONTEXT_UPDATED"],
-  ai: ["AI_REVIEW_GENERATED"],
-  admin: ["AUDIT_VIEWED", "WORKSPACE_CREATED"],
-};
+const SEVERITY_OPTIONS = ["low", "medium", "high", "critical"];
 
-function getCategoryForAction(action) {
-  for (const [cat, actions] of Object.entries(ACTION_CATEGORIES)) {
-    if (actions.includes(action)) return cat;
-  }
-  return "other";
+// Entries written without a severity count as low.
+function severityOf(log) {
+  return SEVERITY_OPTIONS.includes(log.severity) ? log.severity : "low";
 }
 
-
-function ActionBadge({ action }) {
-  const category = getCategoryForAction(action);
-  const classMap = {
-    authentication: "status-badge status-pending",
-    user_management: "status-badge status-delegated",
-    change_requests: "status-badge status-approved",
-    git: "status-badge status-escalated",
-    ai: "status-badge status-closed",
-    admin: "status-badge status-rejected",
-    other: "status-badge",
-  };
+// The action badge is coloured by the entry's severity, not by its action type.
+function ActionBadge({ log }) {
   return (
-    <span className={classMap[category] ?? "status-badge"}>
-      {ACTION_LABELS[action] ?? action}
+    <span className={`status-badge severity-badge severity-${severityOf(log)}`}>
+      {ACTION_LABELS[log.action] ?? log.action}
     </span>
   );
 }
@@ -111,6 +93,10 @@ function EntityReference({ log }) {
   }
 }
 
+function formatSeverity(level) {
+  return level ? level.charAt(0).toUpperCase() + level.slice(1) : "—";
+}
+
 export default function AuditLogPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,9 +105,18 @@ export default function AuditLogPage() {
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [entityFilter, setEntityFilter] = useState("all");
+  const [severityFilter, setSeverityFilter] = useState("all");
   const [expandedId, setExpandedId] = useState(null);
 
+  // Every GET /audit-logs/ writes an "Audit Log Viewed" entry, so the page loads
+  // exactly once per visit. React StrictMode (development) runs mount effects
+  // twice; the ref survives that, so the second run does nothing. Filters only
+  // filter the loaded list and never fetch again.
+  const loadStarted = useRef(false);
+
   useEffect(() => {
+    if (loadStarted.current) return;
+    loadStarted.current = true;
     (async () => {
       try {
         const data = await getAuditLogs();
@@ -142,6 +137,7 @@ export default function AuditLogPage() {
     return logs.filter((log) => {
       if (actionFilter !== "all" && log.action !== actionFilter) return false;
       if (entityFilter !== "all" && log.entity_type !== entityFilter) return false;
+      if (severityFilter !== "all" && severityOf(log) !== severityFilter) return false;
       if (term) {
         const haystack = [
           log.action,
@@ -161,7 +157,7 @@ export default function AuditLogPage() {
       }
       return true;
     });
-  }, [logs, search, actionFilter, entityFilter]);
+  }, [logs, search, actionFilter, entityFilter, severityFilter]);
 
   const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id));
 
@@ -213,7 +209,16 @@ export default function AuditLogPage() {
           ))}
         </select>
 
-        {(search || actionFilter !== "all" || entityFilter !== "all") && (
+        <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} aria-label="Severity">
+          <option value="all">All severities</option>
+          {SEVERITY_OPTIONS.map((level) => (
+            <option key={level} value={level}>
+              {formatSeverity(level)}
+            </option>
+          ))}
+        </select>
+
+        {(search || actionFilter !== "all" || entityFilter !== "all" || severityFilter !== "all") && (
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -221,6 +226,7 @@ export default function AuditLogPage() {
               setSearch("");
               setActionFilter("all");
               setEntityFilter("all");
+              setSeverityFilter("all");
             }}
           >
             Clear filters
@@ -238,7 +244,7 @@ export default function AuditLogPage() {
             <thead>
               <tr>
                 <th>Timestamp</th>
-                <th style={{ minWidth: 260 }}>User</th>
+                <th className="audit-user-col">User</th>
                 <th>Action</th>
                 <th>Entity</th>
                 <th>Details</th>
@@ -247,15 +253,16 @@ export default function AuditLogPage() {
             <tbody>
               {filtered.map((log) => {
                 const isExpanded = expandedId === log.id;
+                const summary = summarizeDetails(log.details);
                 const hasExtra =
+                  summary !== log.details ||
                   log.old_value || log.new_value || log.severity || log.ip_address || log.user_agent;
                 // Role at the time of the action; the user's current role only for
                 // older entries written before actor_role existed.
                 const role = log.actor_role || log.user?.role?.name;
                 return (
-                  <>
+                  <Fragment key={log.id}>
                     <tr
-                      key={log.id}
                       style={{ cursor: hasExtra ? "pointer" : "default" }}
                       onClick={() => hasExtra && toggleExpand(log.id)}
                     >
@@ -287,7 +294,7 @@ export default function AuditLogPage() {
                       </td>
 
                       <td>
-                        <ActionBadge action={log.action} />
+                        <ActionBadge log={log} />
                       </td>
 
                       <td style={{ fontSize: "0.85rem" }}>
@@ -301,8 +308,8 @@ export default function AuditLogPage() {
                         </div>
                       </td>
 
-                      <td style={{ fontSize: "0.85rem", maxWidth: 360 }}>
-                        {log.details ?? "—"}
+                      <td className="audit-details-cell">
+                        {summary ?? "—"}
                         {hasExtra && (
                           <span style={{ marginLeft: 6, fontSize: "0.75rem", color: "var(--text-soft)" }}>
                             {isExpanded ? "▲ less" : "▼ more"}
@@ -312,12 +319,12 @@ export default function AuditLogPage() {
                     </tr>
 
                     {isExpanded && hasExtra && (
-                      <tr key={`${log.id}-extra`} style={{ background: "rgba(139, 92, 246, 0.07)" }}>
+                      <tr className="audit-extra-row">
                         <td colSpan={5} style={{ padding: "10px 18px", fontSize: "0.8rem", color: "var(--text-soft)" }}>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 24px", marginBottom: 4 }}>
                             {log.severity && (
                               <span>
-                                <strong style={{ color: "var(--text)" }}>Severity:</strong> {log.severity}
+                                <strong style={{ color: "var(--text)" }}>Severity:</strong> {formatSeverity(log.severity)}
                               </span>
                             )}
                             <span>
@@ -327,10 +334,15 @@ export default function AuditLogPage() {
                               <strong style={{ color: "var(--text)" }}>User agent:</strong> {log.user_agent ?? "—"}
                             </span>
                           </div>
+                          {log.details && summary !== log.details && (
+                            <div className="audit-full-details">
+                              <strong style={{ color: "var(--text)" }}>Details:</strong> {log.details}
+                            </div>
+                          )}
                           {log.old_value && (
                             <div style={{ marginBottom: 4 }}>
                               <strong style={{ color: "var(--text)" }}>Previous value:</strong>{" "}
-                              <code style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)", padding: "1px 6px", borderRadius: 3 }}>
+                              <code className="audit-value">
                                 {log.old_value}
                               </code>
                             </div>
@@ -338,7 +350,7 @@ export default function AuditLogPage() {
                           {log.new_value && (
                             <div>
                               <strong style={{ color: "var(--text)" }}>New value:</strong>{" "}
-                              <code style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)", padding: "1px 6px", borderRadius: 3 }}>
+                              <code className="audit-value">
                                 {log.new_value}
                               </code>
                             </div>
@@ -346,7 +358,7 @@ export default function AuditLogPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

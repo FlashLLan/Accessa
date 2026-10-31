@@ -1625,3 +1625,64 @@
   font-size: 13px;
   color: var(--text-soft);
 }
+
+/* Audit log -------------------------------------------------------------------- */
+
+/* Action badge coloured by the entry's severity. */
+.severity-low {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
+}
+
+.severity-medium {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.32);
+  color: #fbbf24;
+}
+
+.severity-high {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.32);
+  color: #fca5a5;
+}
+
+.severity-critical {
+  background: rgba(220, 38, 38, 0.32);
+  border-color: rgba(248, 113, 113, 0.7);
+  color: #fee2e2;
+  font-weight: 800;
+}
+
+/* Long values (URLs, commit hashes) wrap instead of widening the table. */
+.audit-user-col {
+  min-width: 200px;
+}
+
+.audit-details-cell {
+  min-width: 240px;
+  max-width: 360px;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.audit-extra-row {
+  background: rgba(139, 92, 246, 0.07);
+}
+
+.audit-extra-row td,
+.audit-full-details,
+.audit-value {
+  overflow-wrap: anywhere;
+}
+
+.audit-full-details {
+  margin-bottom: 4px;
+}
+
+.audit-value {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
