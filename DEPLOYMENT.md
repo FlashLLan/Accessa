@@ -24,7 +24,7 @@ volumes `accessa-prod_pgdata`, ...), so it never collides with the local
 development project `accessa`.
 
 All commands below run on the server as the deploy user, from the repository
-directory, with this alias:
+directory, with this alias (section 2 makes it permanent):
 
 ```bash
 alias dc='docker compose --env-file .env.production -f docker-compose.prod.yml'
@@ -34,7 +34,53 @@ alias dc='docker compose --env-file .env.production -f docker-compose.prod.yml'
 
 ## 1. Server hardening (Ubuntu 24.04)
 
-Log in as root once (with the provider's console or SSH key), then:
+### 1.0 SSH key for root
+
+On **your own machine**, create a key for this server (with a passphrase) and
+copy its public half to root:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/accessa_server -C "accessa-server"
+ssh-copy-id -i ~/.ssh/accessa_server.pub root@<server-ip>      # asks for the root password once
+ssh -i ~/.ssh/accessa_server root@<server-ip>                  # must log in WITHOUT the server password
+```
+
+Only the `.pub` file is copied; `~/.ssh/accessa_server` (the private key) never
+leaves your machine. Use `-i ~/.ssh/accessa_server` in every `ssh` command below.
+
+- A prompt `Enter passphrase for key '…/accessa_server':` is expected: it
+  unlocks your **local** key.
+- A prompt `root@<server-ip>'s password:` means the key was **not** used: check
+  the `-i` path and that `ssh-copy-id` succeeded.
+
+On the server, check that the key arrived:
+
+```bash
+cat /root/.ssh/authorized_keys      # must print a line starting with ssh-ed25519
+```
+
+If it is empty, stop and fix it first: the `install` command below copies this
+file to the deploy user, who would otherwise end up with no key.
+
+Optional, on your own machine: an `~/.ssh/config` entry, so that `ssh accessa`
+is enough once the deploy user exists (step 1.1):
+
+```
+Host accessa
+    HostName <server-ip>
+    User deploy
+    IdentityFile ~/.ssh/accessa_server
+    IdentitiesOnly yes
+    # macOS only: keep the passphrase in the Keychain (Linux: omit these two lines)
+    UseKeychain yes
+    AddKeysToAgent yes
+```
+
+### 1.1 Deploy user, SSH, firewall, updates
+
+**From here on, every command runs on the server, in the SSH session, not on
+your own machine** (except where a step says otherwise). Log in as root:
+`ssh -i ~/.ssh/accessa_server root@<server-ip>`, then:
 
 ```bash
 apt update && apt full-upgrade -y
@@ -49,11 +95,9 @@ install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 install -m 600 -o deploy -g deploy /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
 ```
 
-(If you have no key on the server yet: on your own machine, `ssh-keygen -t ed25519` and
-`ssh-copy-id deploy@<server-ip>`.)
-
-**Keep the root session open** and check, in a second terminal, that
-`ssh deploy@<server-ip>` works and `sudo -v` succeeds. Only then lock SSH down:
+**Keep the root session open** and check, in a second terminal on your own
+machine, that `ssh -i ~/.ssh/accessa_server deploy@<server-ip>` (or `ssh accessa`)
+logs in without a server password and `sudo -v` succeeds. Only then lock SSH down:
 
 ```bash
 # 00-* is read first; sshd uses the first value it finds, so this wins over
@@ -88,6 +132,22 @@ sudo ufw status verbose
 > (80, 443) and PostgreSQL and the backend publish none. Do not add `ports:`
 > to them (not even for debugging; use `dc exec` instead).
 
+**Provider firewall (recommended).** In addition to ufw, add a cloud firewall
+at the provider (for example a Hetzner Cloud Firewall attached to the server):
+inbound **TCP 22, 80 and 443** only, and no outbound rules (outbound stays
+open). It filters traffic before it reaches the server, so Docker cannot
+bypass it. (Optionally also UDP 443 for HTTP/3; without it browsers use HTTP/2.)
+
+**Never open 5432 or 8000**, at the provider or in ufw. PostgreSQL is not
+published at all in `docker-compose.prod.yml`, not even on the server's
+localhost, so an SSH tunnel has nothing to connect to. To work with the
+database, open `psql` inside the container from the SSH session (once the
+stack runs; `dc` is the alias from section 2):
+
+```bash
+dc exec postgres psql -U postgres -d accessa
+```
+
 Automatic security updates:
 
 ```bash
@@ -99,10 +159,16 @@ echo 'Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "04:30";' | sudo tee /etc/apt/apt.conf.d/52accessa-reboot
 ```
 
+**Provider backups (recommended).** Enable the provider's server backups or
+snapshots (Hetzner: *Backups* on the server). The daily database dumps
+(section 8) are on the same server and are lost with it.
+
 ## 2. Docker
 
 Install Docker Engine and the Compose plugin from Docker's repository
-(https://docs.docker.com/engine/install/ubuntu/):
+(https://docs.docker.com/engine/install/ubuntu/). Do **not** install Ubuntu's
+`docker.io` package (apt suggests it when `docker` is missing): it does not
+include the Compose plugin, so `docker compose` would not exist.
 
 ```bash
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -115,13 +181,40 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin d
 sudo usermod -aG docker deploy      # log out and in again; the docker group is root-equivalent
 ```
 
+After logging in again, check without `sudo`:
+
+```bash
+docker run --rm hello-world          # "Hello from Docker!"
+docker compose version               # "Docker Compose version v2…"
+```
+
+Make the `dc` alias permanent (it uses relative paths, so run `dc` from the
+repository directory):
+
+```bash
+echo "alias dc='docker compose --env-file .env.production -f docker-compose.prod.yml'" >> ~/.bashrc && source ~/.bashrc
+```
+
 ## 3. First deployment
 
-1. **Domain.** No DNS of your own needed:
-   - **sslip.io:** `accessa.<ip-with-dashes>.sslip.io`, e.g. `accessa.203-0-113-5.sslip.io` for 203.0.113.5. It resolves automatically.
+1. **Domain.** One of:
+   - **Your own domain** (e.g. `accessa.dev`). At the registrar's DNS settings:
+     - add an **A record** for `@` pointing to the server's IPv4;
+     - **remove the registrar's parking A/AAAA records**. A new domain usually points to the registrar's parking page, and a leftover AAAA record makes Let's Encrypt try that IPv6 address and fail the certificate.
+
+     Check (on the server or your own machine):
+
+     ```bash
+     dig +short <domain> @1.1.1.1         # must print the server's IPv4, and nothing else
+     dig +short AAAA <domain> @1.1.1.1    # must be empty (unless you set up IPv6 for the server)
+     ```
+   - **sslip.io**, no DNS of your own needed: `accessa.<ip-with-dashes>.sslip.io`, e.g. `accessa.203-0-113-5.sslip.io` for 203.0.113.5. It resolves automatically.
    - **DuckDNS:** a free name such as `accessa.duckdns.org`, pointed at the server's IP.
 
-   Ports 80 and 443 must reach the server for the certificate.
+   Ports 80 and 443 must reach the server for the certificate. **Do not run
+   `dc up` before the domain resolves to the server:** every start retries the
+   certificate, and repeated failed requests hit Let's Encrypt's rate limits
+   (then no certificate for a while).
 2. **Code:**
 
    ```bash
@@ -129,13 +222,38 @@ sudo usermod -aG docker deploy      # log out and in again; the docker group is 
    cd ~/accessa
    ```
 
-3. **Secrets:** follow the comments in `.env.production.example`:
+3. **Secrets.** Create the file, then fill all generated values in one go:
 
    ```bash
    cp .env.production.example .env.production && chmod 600 .env.production
-   # generate the secrets (the sed command in the file), then edit:
-   nano .env.production     # ACCESSA_DOMAIN, OPENAI_API_KEY (and OPENAI_MODEL, GITHUB_TOKEN)
+   sed -i \
+     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 32)|" \
+     -e "s|^ACCESSA_OWNER_PASSWORD=.*|ACCESSA_OWNER_PASSWORD=$(openssl rand -hex 32)|" \
+     -e "s|^ACCESSA_APP_PASSWORD=.*|ACCESSA_APP_PASSWORD=$(openssl rand -hex 32)|" \
+     -e "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$(openssl rand -base64 48 | tr -d '\n/+=')|" \
+     -e "s|^MFA_ENCRYPTION_KEY=.*|MFA_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')|" \
+     .env.production
    ```
+
+   Then edit exactly these three values by hand (`nano .env.production`):
+
+   | Variable | Value |
+   |---|---|
+   | `ACCESSA_DOMAIN` | your domain from step 1, e.g. `accessa.dev` (no `https://`) |
+   | `OPENAI_API_KEY` | your OpenAI API key |
+   | `OPENAI_MODEL` | e.g. `gpt-4o-mini` (a model with structured JSON output) |
+
+   `GITHUB_TOKEN` is optional (read-only token, higher GitHub rate limit). Check:
+
+   ```bash
+   grep -c change-me .env.production     # 0
+   ls -l .env.production                 # -rw------- … deploy deploy …
+   ```
+
+   Production secrets are always **new**, generated here; never copy them from a
+   development `.env`. `MFA_ENCRYPTION_KEY` is not something users type: it
+   encrypts the stored MFA secrets. Production starts with an empty database,
+   so every user sets up MFA again with a new QR code.
 
    Keep an offline copy of `MFA_ENCRYPTION_KEY` and the three database passwords.
 4. **Start.** On the first start PostgreSQL runs `docker/postgres/init/01-roles.sh`, which creates `accessa_owner` (owns the database and schema, **no** CREATEDB) and `accessa_app`:
@@ -146,17 +264,29 @@ sudo usermod -aG docker deploy      # log out and in again; the docker group is 
    dc logs caddy | grep -i certificate   # "certificate obtained successfully"
    ```
 
+   In the `dc ps` output only **caddy** shows published ports
+   (`0.0.0.0:80->80/tcp`, `0.0.0.0:443->443/tcp`, …). `5432/tcp` on postgres
+   and `2019/tcp` on caddy, without an arrow, are ports the images declare but
+   that are **not** published. On the first start, Caddy logs lines like
+   `"level":"info" … "error":"… default.json: no such file or directory"`: that
+   is normal (it is creating its ACME account), not a failure.
+
 ## 4. Migrations (one-off, as the schema owner)
 
 The owner's credentials are given to a single throwaway container, never to the
-running backend:
+running backend. The URL is passed through the environment of that one command
+(`-e MIGRATION_DATABASE_URL` without a value), not on the command line, so the
+password does not appear in `ps` output (the same way `deploy/update.sh` does it):
 
 ```bash
 OWNER_PW="$(grep '^ACCESSA_OWNER_PASSWORD=' .env.production | cut -d= -f2-)"
-dc run --rm -e MIGRATION_DATABASE_URL="postgresql+psycopg://accessa_owner:${OWNER_PW}@postgres:5432/accessa" \
-   backend alembic upgrade head
+MIGRATION_DATABASE_URL="postgresql+psycopg://accessa_owner:${OWNER_PW}@postgres:5432/accessa" \
+   dc run --rm -e MIGRATION_DATABASE_URL backend alembic upgrade head
 unset OWNER_PW
 ```
+
+The new deployment has an **empty database**: no users, workspaces or requests
+from development. The first account comes from sign-up (section 6).
 
 The first time, also create the five roles (junior, mid, senior, lead, admin). This runs as the application role:
 
@@ -209,17 +339,22 @@ workspace, never join an existing one. Restrict it if that is not wanted.
 
 ```bash
 cd ~/accessa
-deploy/backup/backup.sh                     # fresh backup first
-git fetch origin && git checkout <branch-or-tag> && git pull --ff-only
-dc build                                    # new backend and frontend images
-OWNER_PW="$(grep '^ACCESSA_OWNER_PASSWORD=' .env.production | cut -d= -f2-)"
-dc run --rm -e MIGRATION_DATABASE_URL="postgresql+psycopg://accessa_owner:${OWNER_PW}@postgres:5432/accessa" \
-   backend alembic upgrade head             # migrations with the new image
-unset OWNER_PW
-dc up -d                                    # replace the running containers
-dc ps && curl -s https://<domain>/api/health
-docker image prune -f
+deploy/update.sh                # the thesis branch
+deploy/update.sh v1.2.0         # or a tag / another branch
 ```
+
+The script:
+
+1. refuses to run if the working tree has local changes;
+2. runs `deploy/backup/backup.sh` and stops if the backup fails;
+3. fetches, checks out the target (`git pull --ff-only` for a branch) and prints the old and new commit;
+4. `dc build`, then the migrations as the schema owner in a one-off container (as in section 4; the running backend never gets the owner's URL);
+5. `dc up -d`, then waits up to about 60 s for `https://<domain>/api/health` to return `{"status":"ok"}`. If it does not, it exits non-zero and prints the previous commit and the backup just written;
+6. `docker image prune -f`;
+7. appends one line to `deploy-history.log` in the repository directory (git-ignored): UTC time, old → new commit, result.
+
+There is deliberately **no automatic deployment from GitHub**: a CI job would
+need an SSH key to the production server. Updates are run by hand.
 
 To roll back, check out the previous version, `dc build && dc up -d`. If the
 new version ran migrations that the old code cannot handle, restore the backup
@@ -243,7 +378,8 @@ Both scripts read `ENV_FILE` (default `.env.production`), `BACKUP_DIR` (default
 
 A backup on the same server does not survive the loss of the server. Copy the
 dumps elsewhere regularly, e.g. from your own machine:
-`rsync -a deploy@<server-ip>:/var/backups/accessa/ ./accessa-backups/`.
+`rsync -a -e "ssh -i ~/.ssh/accessa_server" deploy@<server-ip>:/var/backups/accessa/ ./accessa-backups/`
+(or `rsync -a accessa:/var/backups/accessa/ ./accessa-backups/` with the `~/.ssh/config` entry).
 The dumps contain all data (including encrypted MFA secrets and audit logs):
 store them like the secrets.
 
