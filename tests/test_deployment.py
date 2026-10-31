@@ -1,4 +1,8 @@
 """Deployment behaviour: /health, client IP behind Railway's edge, production guard."""
+import os
+import re
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -99,3 +103,45 @@ def test_production_refuses_migration_credentials(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("MIGRATION_DATABASE_URL", "postgresql+psycopg://owner:pw@db/x")
     check_production_environment()
+
+
+# --- deploy/update.sh (checked as text) -------------------------------------------------
+
+UPDATE_SCRIPT = Path(__file__).resolve().parent.parent / "deploy" / "update.sh"
+
+
+def _script_code() -> str:
+    """The script without comment lines, so comments cannot satisfy the checks."""
+    lines = UPDATE_SCRIPT.read_text().splitlines()
+    return "\n".join(line for line in lines if not line.lstrip().startswith("#"))
+
+
+def test_update_script_is_executable():
+    assert os.access(UPDATE_SCRIPT, os.X_OK)
+
+
+def test_update_script_pulls_fast_forward_only():
+    code = _script_code()
+    assert "git pull --ff-only" in code
+    assert re.search(r"git pull(?! --ff-only)", code) is None
+
+
+def test_update_script_backs_up_before_pulling():
+    code = _script_code()
+    assert "deploy/backup/backup.sh" in code
+    assert code.index("deploy/backup/backup.sh") < code.index("git fetch") < code.index("git pull")
+
+
+def test_update_script_passes_migration_url_by_name_only():
+    code = _script_code()
+    # -e NAME without a value: the URL comes from the environment of that one
+    # command, never from the command line.
+    assert re.search(r"run --rm -e MIGRATION_DATABASE_URL backend alembic upgrade head", code)
+    assert "-e MIGRATION_DATABASE_URL=" not in code
+    assert "export MIGRATION_DATABASE_URL" not in code
+
+
+def test_update_script_never_traces_commands():
+    code = UPDATE_SCRIPT.read_text()
+    assert "set -euo pipefail" in code
+    assert re.search(r"set -[a-z]*x|set -o xtrace|bash -x", code) is None
