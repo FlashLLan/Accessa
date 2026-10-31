@@ -20,7 +20,6 @@ from backend.api import review_actions
 from backend.api import mfa
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core.security_headers import SecurityHeadersMiddleware
-from backend.core.proxy import TrustedProxyHeadersMiddleware
 
 # The schema is managed only by Alembic migrations (alembic upgrade head),
 # never created implicitly at startup.
@@ -52,9 +51,6 @@ app.add_middleware(
 )
 # Added last = outermost: also covers CORS preflight answers and error responses.
 app.add_middleware(SecurityHeadersMiddleware)
-# Outermost: the real client address and scheme (from the trusted proxy) are set
-# before the rate limiter, the audit log and the HSTS decision see the request.
-app.add_middleware(TrustedProxyHeadersMiddleware)
 app.include_router(users.router)
 app.include_router(auth.router)
 app.include_router(change_requests.router)

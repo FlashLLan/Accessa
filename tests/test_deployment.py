@@ -1,4 +1,4 @@
-"""Deployment behaviour: /health, client IP behind Railway's edge, production guard."""
+"""Deployment behaviour: /health, client IP behind Caddy, production guard, update script."""
 import os
 import re
 from pathlib import Path
@@ -26,71 +26,79 @@ def _last_login_ip(db):
     return db.query(AuditLog).filter(AuditLog.action == "LOGIN_FAILED").order_by(AuditLog.id.desc()).first().ip_address
 
 
-def test_without_client_ip_header_setting_no_header_is_trusted(client, db, monkeypatch):
-    monkeypatch.delenv("CLIENT_IP_HEADER", raising=False)
+def test_client_supplied_forwarding_headers_are_ignored_by_the_app(client, db):
+    # The app itself never reads X-Real-IP / X-Forwarded-For: only uvicorn's
+    # --proxy-headers does, and only for connections from Caddy (below).
     _failed_login(client, {"X-Real-IP": "203.0.113.7", "X-Forwarded-For": "198.51.100.1"})
     assert _last_login_ip(db) == "testclient"
 
 
-def test_x_real_ip_is_the_client_address_behind_the_edge(client, db, monkeypatch):
-    monkeypatch.setenv("CLIENT_IP_HEADER", "X-Real-IP")
-    _failed_login(client, {"X-Real-IP": "203.0.113.7", "X-Forwarded-For": "198.51.100.1, 10.0.0.1"})
-    assert _last_login_ip(db) == "203.0.113.7"
-
-
-def test_x_forwarded_for_is_never_used(client, db, monkeypatch):
-    monkeypatch.setenv("CLIENT_IP_HEADER", "X-Real-IP")
-    _failed_login(client, {"X-Forwarded-For": "198.51.100.1"})
-    assert _last_login_ip(db) == "testclient"
-
-
-@pytest.mark.parametrize("value", ["not-an-ip", "203.0.113.7, 198.51.100.1", "", "<script>"])
-def test_invalid_header_values_are_ignored(client, db, monkeypatch, value):
-    monkeypatch.setenv("CLIENT_IP_HEADER", "X-Real-IP")
-    _failed_login(client, {"X-Real-IP": value})
-    assert _last_login_ip(db) == "testclient"
-
-
-def test_ipv6_client_address(client, db, monkeypatch):
-    monkeypatch.setenv("CLIENT_IP_HEADER", "X-Real-IP")
-    _failed_login(client, {"X-Real-IP": "2001:db8::1"})
-    assert _last_login_ip(db) == "2001:db8::1"
-
-
-def test_rate_limit_is_per_real_client(client, db, monkeypatch):
-    monkeypatch.setenv("CLIENT_IP_HEADER", "X-Real-IP")
+def test_spoofed_headers_do_not_escape_the_rate_limit(client, db):
     body = {"workspace_slug": "default-test", "email": "ghost@example.com", "password": "x"}
     app.state.limiter.reset()
     app.state.limiter.enabled = True
     try:
-        first = [client.post("/auth/login", json=body, headers={"X-Real-IP": "203.0.113.7"}).status_code
-                 for _ in range(6)]
-        other = client.post("/auth/login", json=body, headers={"X-Real-IP": "203.0.113.8"}).status_code
-        # Changing X-Forwarded-For does not escape the limit.
-        spoof = client.post("/auth/login", json=body,
-                            headers={"X-Real-IP": "203.0.113.7", "X-Forwarded-For": "1.2.3.4"}).status_code
+        codes = [client.post("/auth/login", json=body,
+                             headers={"X-Forwarded-For": f"198.51.100.{i}", "X-Real-IP": f"203.0.113.{i}"}).status_code
+                 for i in range(7)]
     finally:
         app.state.limiter.enabled = False
         app.state.limiter.reset()
-    assert first[-1] == 429 and other == 401 and spoof == 429
+    assert codes[-1] == 429
 
 
-def test_forwarded_proto_https_enables_hsts_in_production(db, monkeypatch):
-    monkeypatch.setenv("CLIENT_IP_HEADER", "X-Real-IP")
+def test_hsts_only_over_https_in_production(db, monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
-    with TestClient(app) as http_client:  # plain http to the app, https at the edge
-        response = http_client.get("/health", headers={"X-Forwarded-Proto": "https"})
-        plain = http_client.get("/health")
-    assert response.headers["strict-transport-security"] == "max-age=31536000"
+    with TestClient(app, base_url="https://testserver") as https_client:
+        secure = https_client.get("/health")
+    with TestClient(app) as http_client:
+        # A client-supplied X-Forwarded-Proto does not make plain http count as https.
+        plain = http_client.get("/health", headers={"X-Forwarded-Proto": "https"})
+    assert secure.headers["strict-transport-security"] == "max-age=31536000"
     assert "strict-transport-security" not in plain.headers
 
 
-def test_forwarded_proto_is_ignored_without_the_setting(db, monkeypatch):
-    monkeypatch.delenv("CLIENT_IP_HEADER", raising=False)
-    monkeypatch.setenv("APP_ENV", "production")
-    with TestClient(app) as http_client:
-        response = http_client.get("/health", headers={"X-Forwarded-Proto": "https"})
-    assert "strict-transport-security" not in response.headers
+# --- client IP in production: uvicorn --proxy-headers, trusting only Caddy -------------
+
+ROOT = Path(__file__).resolve().parent.parent
+COMPOSE = (ROOT / "docker-compose.prod.yml").read_text()
+
+
+def _caddy_ip() -> str:
+    trusted = re.search(r"--forwarded-allow-ips=\$\{CADDY_IP:-([0-9.]+)\}", COMPOSE).group(1)
+    caddy = re.search(r"ipv4_address: \$\{CADDY_IP:-([0-9.]+)\}", COMPOSE).group(1)
+    assert trusted == caddy
+    return caddy
+
+
+def test_backend_trusts_proxy_headers_only_from_caddy():
+    assert "- --proxy-headers" in COMPOSE
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    assert '"--proxy-headers"' in dockerfile and "--no-proxy-headers" not in dockerfile
+    # No second, header-based way of setting the client address.
+    assert "CLIENT_IP_HEADER" not in COMPOSE + dockerfile
+
+
+@pytest.mark.parametrize("peer, expected", [
+    ("caddy", ("203.0.113.7", "https")),       # Caddy's X-Forwarded-For/-Proto are applied
+    ("172.30.0.3", ("172.30.0.3", "http")),     # anyone else on the network: ignored
+])
+def test_uvicorn_proxy_headers_with_the_compose_setting(peer, expected):
+    import asyncio
+
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    caddy = _caddy_ip()
+    seen = {}
+
+    async def inner(scope, receive, send):
+        seen["client"], seen["scheme"] = scope["client"][0], scope["scheme"]
+
+    middleware = ProxyHeadersMiddleware(inner, trusted_hosts=caddy)
+    scope = {"type": "http", "scheme": "http", "client": (caddy if peer == "caddy" else peer, 40000),
+             "headers": [(b"x-forwarded-for", b"203.0.113.7"), (b"x-forwarded-proto", b"https")]}
+    asyncio.run(middleware(scope, None, None))
+    assert (seen["client"], seen["scheme"]) == expected
 
 
 def test_production_refuses_migration_credentials(monkeypatch):

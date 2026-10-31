@@ -63,9 +63,6 @@ services:
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       CORS_ORIGINS: https://${ACCESSA_DOMAIN:?set ACCESSA_DOMAIN in .env.production}
       APP_ENV: production
-      # The client address comes from uvicorn's proxy headers (trusting only Caddy,
-      # below), not from the X-Real-IP middleware used on Railway.
-      CLIENT_IP_HEADER: ""
     # Caddy replaces X-Forwarded-For with the connecting client's address and sets
     # X-Forwarded-Proto. uvicorn accepts those headers only from Caddy's fixed
     # address; from anyone else they are ignored.

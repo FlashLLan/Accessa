@@ -28,9 +28,9 @@ class ClientInfo:
 def get_client_info(request: Request) -> ClientInfo:
     # request.client.host is the TCP peer address. Behind a reverse proxy or load
     # balancer that is the proxy, not the user: the real client IP must then come
-    # from the header set by the *trusted* proxy (e.g. X-Forwarded-For / X-Real-IP,
-    # via uvicorn --proxy-headers --forwarded-allow-ips=<proxy ip>). Never take it
-    # from a header the client can set directly.
+    # from the header set by the *trusted* proxy (X-Forwarded-For, applied by
+    # uvicorn --proxy-headers --forwarded-allow-ips=<proxy ip>; in production only
+    # Caddy's fixed address). Never take it from a header the client can set directly.
     user_agent = request.headers.get("user-agent")
     return ClientInfo(
         ip_address=request.client.host if request.client else None,

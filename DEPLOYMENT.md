@@ -427,15 +427,6 @@ the restore above brings back the data and rights.
 | `MFA_ENCRYPTION_KEY` | Fernet key; keep a backup |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | AI review |
 | `GITHUB_TOKEN` | optional, read-only |
-| `MIGRATION_DATABASE_URL` | **never** in this file or on the backend; inline in the migration command |
+| `MIGRATION_DATABASE_URL` | **never** in this file or on the backend; only in the environment of the one-off migration command |
 
 `APP_ENV=production` is set by `docker-compose.prod.yml`.
-
-## Railway (previous setup)
-
-The Railway files (`railway.json`, `frontend/railway.json`,
-`scripts/railway_db_roles.sql`, and the defaults in `Dockerfile` /
-`frontend/Dockerfile`) are still in the repository. They do not affect this
-deployment, because `docker-compose.prod.yml` overrides the start command and
-`CLIENT_IP_HEADER`. The Railway instructions are in the git history
-(commit `431c272`); that setup is no longer maintained.

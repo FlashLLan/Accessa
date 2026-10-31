@@ -1,7 +1,7 @@
 node_modules
 dist
 # Local env files must not be baked into the bundle; VITE_API_URL comes from
-# the Railway build variable.
+# the build argument (docker-compose.prod.yml).
 .env
 .env.*
 !.env.example
