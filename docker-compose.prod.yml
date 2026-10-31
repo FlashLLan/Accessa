@@ -8,10 +8,18 @@
 # on the private networks below.
 name: accessa
 
+# Container logs are capped (default json-file logs grow without limit).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
@@ -38,6 +46,7 @@ services:
       dockerfile: Dockerfile
     image: accessa-backend
     restart: unless-stopped
+    logging: *logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +94,7 @@ services:
         VITE_API_URL: https://${ACCESSA_DOMAIN:?set ACCESSA_DOMAIN in .env.production}/api
     image: accessa-caddy
     restart: unless-stopped
+    logging: *logging
     depends_on:
       backend:
         condition: service_healthy
