@@ -625,6 +625,16 @@ def get_user_details(
         .scalar()
     )
 
+    # The user's own requests by outcome; drafts are not counted. An applied
+    # request was approved first, so it counts as approved.
+    own_by_status = dict(
+        scoped(db, ChangeRequest, workspace_id)
+        .filter(ChangeRequest.created_by == user.id)
+        .with_entities(ChangeRequest.status, func.count(ChangeRequest.id))
+        .group_by(ChangeRequest.status)
+        .all()
+    )
+
     return {
         "id": user.id,
         "full_name": user.full_name,
@@ -637,5 +647,9 @@ def get_user_details(
             "total_requests_created": total_requests_created or 0,
             "total_requests_approved": total_requests_approved or 0,
             "total_requests_rejected": total_requests_rejected or 0,
+            "own_requests_approved": own_by_status.get(RequestStatus.APPROVED, 0)
+                                     + own_by_status.get(RequestStatus.APPLIED, 0),
+            "own_requests_rejected": own_by_status.get(RequestStatus.REJECTED, 0),
+            "own_requests_pending": own_by_status.get(RequestStatus.PENDING_REVIEW, 0),
         },
     }

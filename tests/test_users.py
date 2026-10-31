@@ -1,3 +1,4 @@
+from backend.models.enums import RequestStatus
 from backend.main import app
 from backend.core.dependencies import get_current_user
 
@@ -295,6 +296,34 @@ def test_admin_can_view_user_details(client, db, create_user, create_role, login
     assert "total_requests_created" in data["stats"]
     assert "total_requests_approved" in data["stats"]
     assert "total_requests_rejected" in data["stats"]
+
+
+def test_user_details_count_own_requests_by_outcome_without_drafts(
+    client, db, create_user, create_role, login_user, seed_change_request, create_workspace
+):
+    admin_role = create_role(db, "admin", level=10)
+    junior_role = create_role(db, "junior", level=1)
+    admin = create_user(db, role=admin_role, label="admin")
+    target = create_user(db, role=junior_role, label="target")
+    other = create_user(db, role=junior_role, label="other")
+
+    statuses = [RequestStatus.DRAFT, RequestStatus.DRAFT, RequestStatus.PENDING_REVIEW,
+                RequestStatus.APPROVED, RequestStatus.APPLIED, RequestStatus.REJECTED]
+    for status in statuses:
+        seed_change_request(db, creator_id=target.id, reviewer_id=admin.id, status=status)
+    # Someone else's request, and the same user name in another workspace, do not count.
+    seed_change_request(db, creator_id=other.id, reviewer_id=admin.id, status=RequestStatus.APPROVED)
+    elsewhere = create_workspace(db, "Elsewhere", "elsewhere")
+    stranger = create_user(db, role=junior_role, label="stranger", workspace=elsewhere)
+    seed_change_request(db, creator_id=stranger.id, reviewer_id=stranger.id, status=RequestStatus.REJECTED)
+
+    login_user(admin)
+    stats = client.get(f"/users/{target.id}/details").json()["stats"]
+
+    assert stats["own_requests_approved"] == 2      # approved + applied
+    assert stats["own_requests_rejected"] == 1
+    assert stats["own_requests_pending"] == 1       # drafts are not counted
+    assert stats["total_requests_created"] == 6
 
 
 def test_regular_user_cannot_view_user_details(client, db, create_user, create_role, login_user):

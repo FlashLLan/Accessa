@@ -48,8 +48,13 @@ class UserShortResponse(BaseModel):
 
 class UserStatsResponse(BaseModel):
     total_requests_created: int
+    # Decisions this user made as a reviewer.
     total_requests_approved: int
     total_requests_rejected: int
+    # Outcome of this user's own requests (drafts not counted; applied = approved).
+    own_requests_approved: int = 0
+    own_requests_rejected: int = 0
+    own_requests_pending: int = 0
 
 
 class UserDetailsResponse(BaseModel):

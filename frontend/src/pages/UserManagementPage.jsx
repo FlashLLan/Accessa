@@ -16,6 +16,22 @@ import {
 import { formatDateTime } from "../utils/requestPresentation";
 import { formatRole } from "../utils/roleUtils";
 
+// A details box with several counts on one line, e.g. "10 approved  2 rejected".
+function DetailCounts({ label, counts }) {
+  return (
+    <div className="detail-box detail-box-counts">
+      <span className="detail-label">{label}</span>
+      <div className="detail-counts">
+        {counts.map(([name, count]) => (
+          <span key={name}>
+            <strong>{count ?? 0}</strong> {name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function normalizeApiUser(user) {
   return {
     id: user.id,
@@ -689,31 +705,35 @@ const handleResetMfa = (targetUser) => {
                         <tr className="user-details-row" id={`user-details-${targetUser.id}`} ref={detailsRef}>
                           <td colSpan={5}>
                             <div className="details-grid">
-                            <div className="detail-box">
-                              <span className="detail-label">Created at</span>
-                              <strong>{formatDateTime(detailsUser.created_at)}</strong>
-                            </div>
+                              <div className="detail-box">
+                                <span className="detail-label">Created at</span>
+                                <strong>{formatDateTime(detailsUser.created_at)}</strong>
+                              </div>
 
-                            <div className="detail-box">
-                            <span className="detail-label">Requests created</span>
-                              <strong>{detailsUser.stats?.total_requests_created ?? 0}</strong>
-                            </div>
+                              <div className="detail-box">
+                                <span className="detail-label">MFA</span>
+                                <strong>{detailsUser.mfa_enabled ? "Enrolled" : "Not set up"}</strong>
+                              </div>
 
-                            <div className="detail-box">
-                              <span className="detail-label">Requests approved</span>
-                              <strong>{detailsUser.stats?.total_requests_approved ?? 0}</strong>
-                            </div>
+                              {/* How the user's own requests ended up; drafts are only in the total. */}
+                              <DetailCounts
+                                  label={`Own requests · ${detailsUser.stats?.total_requests_created ?? 0} created`}
+                                  counts={[
+                                    ["approved", detailsUser.stats?.own_requests_approved],
+                                    ["rejected", detailsUser.stats?.own_requests_rejected],
+                                    ["pending", detailsUser.stats?.own_requests_pending],
+                                  ]}
+                              />
 
-                            <div className="detail-box">
-                              <span className="detail-label">Requests rejected</span>
-                              <strong>{detailsUser.stats?.total_requests_rejected ?? 0}</strong>
+                              {/* Decisions this user made on other people's requests. */}
+                              <DetailCounts
+                                  label="As reviewer"
+                                  counts={[
+                                    ["approved", detailsUser.stats?.total_requests_approved],
+                                    ["rejected", detailsUser.stats?.total_requests_rejected],
+                                  ]}
+                              />
                             </div>
-
-                            <div className="detail-box">
-                              <span className="detail-label">MFA</span>
-                              <strong>{detailsUser.mfa_enabled ? "Enrolled" : "Not set up"}</strong>
-                            </div>
-                          </div>
                           </td>
                         </tr>
                       )}

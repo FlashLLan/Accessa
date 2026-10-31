@@ -84,7 +84,10 @@ describe("MFA in User Management", () => {
   it("Details expands a row under the user, scrolls it into view, and hides it again", async () => {
     const scroll = vi.fn();
     window.HTMLElement.prototype.scrollIntoView = scroll;
-    api.getUserDetails.mockResolvedValue({ ...SAM, stats: {} });
+    api.getUserDetails.mockResolvedValue({ ...SAM, stats: {
+      total_requests_created: 6, total_requests_approved: 3, total_requests_rejected: 1,
+      own_requests_approved: 2, own_requests_rejected: 1, own_requests_pending: 1,
+    } });
     renderPage();
     const samRow = await row("Sam Senior");
     fireEvent.click(within(samRow).getByRole("button", { name: "Details" }));
@@ -96,6 +99,9 @@ describe("MFA in User Management", () => {
     expect(detailsRow.className).toBe("user-details-row");
     expect(toggle.getAttribute("aria-controls")).toBe(detailsRow.id);
     expect(within(detailsRow).getByText("MFA").nextSibling.textContent).toBe("Enrolled");
+    const counts = (label) => [...within(detailsRow).getByText(label).nextSibling.children].map((item) => item.textContent);
+    expect(counts("Own requests · 6 created")).toEqual(["2 approved", "1 rejected", "1 pending"]);
+    expect(counts("As reviewer")).toEqual(["3 approved", "1 rejected"]);
     await waitFor(() => expect(scroll).toHaveBeenCalled());
     expect(scroll.mock.contexts.at(-1)).toBe(detailsRow);
 
