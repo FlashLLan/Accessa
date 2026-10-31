@@ -216,7 +216,7 @@ def approve_change_request(
         action="REQUEST_APPROVED",
         entity_type="change_request",
         entity_id=change_request.id,
-        severity="high",
+        severity="critical" if change_request.risk_level == RiskLevel.HIGH else "high",
         details=(
             f"Approved | approver_role={current_user.role.name} | "
             f"requester_role={change_request.creator.role.name} | "

@@ -304,7 +304,7 @@ def test_wrong_codes_spread_over_several_logins_lock_the_account(client, db, peo
 
     _fail(client, _pending(client, people["mid"]), secret, 1)  # the 10th
     [locked] = _audit(db, "MFA_LOCKED")
-    assert locked.severity == "high" and "15 minutes" in locked.details and "10 consecutive" in locked.details
+    assert locked.severity == "critical" and "15 minutes" in locked.details and "10 consecutive" in locked.details
     assert (locked.ip_address, locked.user_agent) == ("testclient", USER_AGENT)
     db.expire_all()
     until = db.get(User, people["mid"].id).mfa_locked_until

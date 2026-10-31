@@ -183,7 +183,7 @@ def verify_mfa(
         if locked:
             log_action(
                 db=db, ip_address=client.ip_address, user_agent=client.user_agent, **_about(user),
-                action="MFA_LOCKED", severity="high",
+                action="MFA_LOCKED", severity="critical",  # likely code guessing on a known password
                 details=f"MFA verification locked for {LOCK_SECONDS // 60} minutes after "
                         f"{user.mfa_failed_attempts} consecutive wrong codes",
             )

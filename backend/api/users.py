@@ -456,7 +456,8 @@ def deactivate_user(
         action="USER_DEACTIVATED",
         entity_type="user",
         entity_id=user.id,
-        severity="high",
+        # Critical when it changes who controls the workspace.
+        severity="critical" if user.role.name == "admin" else "high",
         details="User deactivated"
     )
     db.commit()
@@ -498,7 +499,8 @@ def reset_user_mfa(
         action="MFA_RESET",
         entity_type="user",
         entity_id=user.id,
-        severity="high",
+        # Critical for an admin: removes the second factor from the most powerful account.
+        severity="critical" if user.role.name == "admin" else "high",
         old_value="enabled" if was_enabled else "not enabled",
         new_value="not enabled",
         details="MFA reset by admin; the user must enrol again",
@@ -580,7 +582,8 @@ def update_user_role(
         action="ROLE_CHANGED",
         entity_type="user",
         entity_id=user.id,
-        severity="high",
+        # Critical when admin rights are granted or taken away.
+        severity="critical" if "admin" in (old_role_name, new_role.name) else "high",
         details=f"Role changed from '{old_role_name}' to '{new_role.name}'",
         old_value=old_role_name,
         new_value=new_role.name
