@@ -70,13 +70,6 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      <div className="sidebar-footer">
-        <div className="sidebar-user-card">
-          <span className="sidebar-user-label">Current role</span>
-          <strong>{role || "unknown"}</strong>
-        </div>
-      </div>
     </aside>
   );
 }

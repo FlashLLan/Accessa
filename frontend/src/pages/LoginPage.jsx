@@ -151,7 +151,7 @@ export default function LoginPage() {
             <input
               id="email"
               type="email"
-              placeholder="admin@test.com"
+              placeholder="you@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -184,15 +184,6 @@ export default function LoginPage() {
           {" · "}
           New team? <Link to="/signup">Sign up</Link>
         </p>
-
-        <div className="auth-help">
-          <span>Test accounts:</span>
-          <code>admin@test.com</code>
-          <code>lead@test.com</code>
-          <code>senior@test.com</code>
-          <code>mid@test.com</code>
-          <code>junior@test.com</code>
-        </div>
       </div>
     </div>
   );

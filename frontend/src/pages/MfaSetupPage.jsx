@@ -6,7 +6,7 @@ import { confirmMfa, setupMfa } from "../api/auth";
 import { extractApiError } from "../utils/apiError";
 
 // MFA is mandatory. Reached automatically after the first password change, or
-// whenever the backend answers "mfa_setup_required" (e.g. after an admin reset).
+// whenever the server answers "mfa_setup_required" (e.g. after an admin reset).
 export default function MfaSetupPage() {
   const { user, refreshMe, logout } = useAuth();
   const navigate = useNavigate();
@@ -29,7 +29,7 @@ export default function MfaSetupPage() {
       try {
         const data = await setupMfa();
         setSecret(data.secret);
-        setQrDataUrl(await QRCode.toDataURL(data.otpauth_uri, { margin: 1, width: 220 }));
+        setQrDataUrl(await QRCode.toDataURL(data.otpauth_uri, { margin: 1, width: 180 }));
       } catch (err) {
         if (err?.response?.status === 409) {
           // Already enabled (e.g. in another tab).
@@ -69,15 +69,15 @@ export default function MfaSetupPage() {
   const groupedSecret = secret.match(/.{1,4}/g)?.join(" ") ?? "";
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
+    <div className="auth-page auth-page-compact">
+      <div className="auth-card auth-card-compact">
         <div className="auth-header">
           <p className="auth-kicker">{user?.workspace?.name || "Accessa"}</p>
           <h1>Set up two-factor authentication</h1>
           <p className="auth-subtitle">
-            Accessa requires a second factor for every account. Scan the QR code with
-            any authenticator app that supports TOTP codes (for example Google
-            Authenticator or Microsoft Authenticator), then enter the 6-digit code it shows.
+            Accessa requires a second factor for every account. Scan the QR code with an
+            authenticator app (for example Google or Microsoft Authenticator) and enter the
+            6-digit code it shows.
           </p>
         </div>
 
@@ -86,10 +86,10 @@ export default function MfaSetupPage() {
         ) : secret ? (
           <>
             <div className="mfa-qr">
-              {qrDataUrl && <img src={qrDataUrl} alt="QR code for your authenticator app" width="220" height="220" />}
+              {qrDataUrl && <img src={qrDataUrl} alt="QR code for your authenticator app" width="180" height="180" />}
             </div>
 
-            <div className="form-group">
+            <div className="form-group mfa-manual">
               <span className="detail-label">Can't scan? Enter this key manually</span>
               <code className="mfa-secret">{groupedSecret}</code>
               <span className="form-hint">Account: {user?.email} · Issuer: Accessa · Time-based</span>

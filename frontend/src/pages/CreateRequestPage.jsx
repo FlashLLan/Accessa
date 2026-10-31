@@ -5,6 +5,7 @@ import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users";
 import { useAuth } from "../hooks/useAuth";
 import { extractApiError } from "../utils/apiError";
+import { formatRole } from "../utils/roleUtils";
 
 const initialForm = {
   title: "",
@@ -125,7 +126,7 @@ export default function CreateRequestPage() {
     <div className="page-card">
       <h2 className="page-title">Create Request</h2>
       <p className="page-subtitle">
-        Submit a new change request using the real backend API.
+        Describe the change, its risk and who should review it.
       </p>
 
       {error && <div className="auth-error">{error}</div>}
@@ -236,7 +237,7 @@ export default function CreateRequestPage() {
               </option>
               {reviewers.map((reviewer) => (
                 <option key={reviewer.id} value={reviewer.id}>
-                  {reviewer.full_name || reviewer.email} ({reviewer.role?.name || "role"})
+                  {reviewer.full_name || reviewer.email} ({formatRole(reviewer.role?.name)})
                 </option>
               ))}
             </select>

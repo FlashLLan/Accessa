@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import Toast from "../components/common/Toast";
 import { updateMe, changePassword, getMyStats } from "../api/users";
 import { useAuth } from "../hooks/useAuth";
-import { formatDate } from "../utils/requestPresentation";
+import { formatDateTime } from "../utils/requestPresentation";
 import { extractApiError } from "../utils/apiError";
+import { formatRole } from "../utils/roleUtils";
 
 export default function AccountPage() {
   const { user, refreshMe } = useAuth();
@@ -143,7 +144,7 @@ export default function AccountPage() {
           </div>
           <div className="detail-box">
             <span className="detail-label">Role</span>
-            <strong style={{ textTransform: "capitalize" }}>{user?.role}</strong>
+            <strong>{formatRole(user?.role)}</strong>
           </div>
           <div className="detail-box">
             <span className="detail-label">Status</span>
@@ -153,7 +154,7 @@ export default function AccountPage() {
           </div>
           <div className="detail-box">
             <span className="detail-label">Member Since</span>
-            <strong>{user?.created_at ? formatDate(user.created_at) : "—"}</strong>
+            <strong>{user?.created_at ? formatDateTime(user.created_at) : "—"}</strong>
           </div>
         </div>
 

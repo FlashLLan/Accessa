@@ -1,16 +1,15 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { formatRole } from "../utils/roleUtils";
 
 export default function DashboardPage() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
 
   return (
     <div className="page-card">
       <h2 className="page-title">Dashboard</h2>
       <p className="page-subtitle">
-        Welcome to Accessa. This is your control panel for navigating requests,
-        reviews, and user management while the backend features are still being
-        connected.
+        Your starting point for change requests, reviews and your account.
       </p>
 
       <div className="page-grid">
@@ -21,14 +20,12 @@ export default function DashboardPage() {
 
         <div className="stat-card">
           <span className="stat-label">Role</span>
-          <div className="stat-value" style={{ textTransform: "capitalize" }}>
-            {user?.role || "Unknown"}
-          </div>
+          <div className="stat-value">{formatRole(user?.role)}</div>
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">Auth status</span>
-          <div className="stat-value">{token ? "Active" : "Missing"}</div>
+          <span className="stat-label">Workspace</span>
+          <div className="stat-value">{user?.workspace?.name || "—"}</div>
         </div>
       </div>
 
@@ -65,7 +62,7 @@ export default function DashboardPage() {
           </div>
           <div className="detail-box">
             <span className="detail-label">Role</span>
-            <strong style={{ textTransform: "capitalize" }}>{user?.role || "Unknown"}</strong>
+            <strong>{formatRole(user?.role)}</strong>
           </div>
         </div>
         <div className="page-actions">

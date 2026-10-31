@@ -8,6 +8,7 @@ import { getReviewers } from "../api/users.js";
 import { getGitHead } from "../api/changeRequests";
 import { useAuth } from "../hooks/useAuth";
 import { extractApiError } from "../utils/apiError";
+import { formatRole } from "../utils/roleUtils";
 import {
   canApplyRequest,
   canApproveRequest,
@@ -17,7 +18,7 @@ import {
   canSubmitRequest,
 } from "../utils/requestPermissions";
 import {
-  formatDate,
+  formatDateTime,
   formatEnumLabel,
   getStatusBadgeClass,
   getDecisionBadgeClass,
@@ -124,7 +125,7 @@ function GitContextCard({ git, head }) {
       {(git.diff_text || git.changed_files_summary) && (
         <p className={`git-provenance ${git.source === "github" ? "git-provenance-verified" : ""}`}>
           {git.source === "github"
-            ? `Fetched from GitHub at commit ${(git.commit_hash || "").slice(0, 7)} (${formatDate(git.fetched_at)})`
+            ? `Fetched from GitHub at commit ${(git.commit_hash || "").slice(0, 7)} (${formatDateTime(git.fetched_at)})`
             : "Entered by the requester, not verified"}
         </p>
       )}
@@ -385,7 +386,7 @@ const canTransfer = canEscalate || canDelegate;
         <div>
           <h2 className="page-title">{request.title}</h2>
           <p className="page-subtitle">
-            Real request details with comments and approval history.
+            Request details, Git context, review and history.
           </p>
         </div>
 
@@ -440,7 +441,7 @@ const canTransfer = canEscalate || canDelegate;
 
           <div className="detail-box">
             <span className="detail-label">Created At</span>
-            <strong>{formatDate(request.created_at)}</strong>
+            <strong>{formatDateTime(request.created_at)}</strong>
           </div>
         </div>
       </div>
@@ -541,7 +542,7 @@ const canTransfer = canEscalate || canDelegate;
               <option value="">— Select reviewer —</option>
               {availableReviewers.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.full_name || r.email} ({r.role?.name ?? "unknown"})
+                  {r.full_name || r.email} ({formatRole(r.role?.name)})
                 </option>
               ))}
             </select>
@@ -613,7 +614,7 @@ const canTransfer = canEscalate || canDelegate;
               <div key={comment.id} className="timeline-card">
                 <div className="timeline-card-top">
                   <strong>{comment.user?.full_name || comment.user?.email}</strong>
-                  <span className="request-date">{formatDate(comment.created_at)}</span>
+                  <span className="request-date">{formatDateTime(comment.created_at)}</span>
                 </div>
                 <p>{comment.comment_text}</p>
               </div>
@@ -638,7 +639,7 @@ const canTransfer = canEscalate || canDelegate;
                   </span>
                 </div>
                 <p>{approval.decision_comment || "No comment provided."}</p>
-                <span className="request-date">{formatDate(approval.created_at)}</span>
+                <span className="request-date">{formatDateTime(approval.created_at)}</span>
               </div>
             ))
           )}
@@ -664,7 +665,7 @@ const canTransfer = canEscalate || canDelegate;
                   </p>
                 )}
                 {action.comment && <p>{action.comment}</p>}
-                <span className="request-date">{formatDate(action.created_at)}</span>
+                <span className="request-date">{formatDateTime(action.created_at)}</span>
               </div>
             ))}
           </div>

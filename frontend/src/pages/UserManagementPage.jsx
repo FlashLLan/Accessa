@@ -13,7 +13,8 @@ import {
   resetUserMfa,
   updateUserRole,
 } from "../api/users";
-import { parseUtcDate } from "../utils/requestPresentation";
+import { formatDateTime } from "../utils/requestPresentation";
+import { formatRole } from "../utils/roleUtils";
 
 function normalizeApiUser(user) {
   return {
@@ -81,18 +82,6 @@ export default function UserManagementPage() {
   role_id: "",
 });
 
-function formatDateTime(value) {
-  if (!value) return "-";
-
-  const date = parseUtcDate(value);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
-}
 
 
   const loadData = async () => {
@@ -283,7 +272,7 @@ const handleSaveRole = async (targetUser) => {
 
   openConfirmModal({
     title: "Confirm role change",
-    message: `Are you sure you want to change ${targetUser.full_name}'s role from ${targetUser.role?.name} to ${nextRoleName}? This change applies immediately.`,
+    message: `Are you sure you want to change ${targetUser.full_name}'s role from ${formatRole(targetUser.role?.name)} to ${formatRole(nextRoleName)}? This change applies immediately.`,
     confirmText: "Change role",
     confirmVariant: "primary",
     onConfirm: async () => {
@@ -486,7 +475,7 @@ const handleResetMfa = (targetUser) => {
                       <option value="">Select role</option>
                       {roles.map((role) => (
                           <option key={role.id} value={role.id}>
-                            {role.name}
+                            {formatRole(role.name)}
                           </option>
                       ))}
                     </select>
@@ -575,7 +564,7 @@ const handleResetMfa = (targetUser) => {
 
                 <div className="detail-box">
                   <span className="detail-label">Role</span>
-                  <strong>{detailsUser.role?.name}</strong>
+                  <strong>{formatRole(detailsUser.role?.name)}</strong>
                 </div>
 
                 <div className="detail-box">
@@ -656,23 +645,25 @@ const handleResetMfa = (targetUser) => {
                                 >
                                   {roles.map((role) => (
                                       <option key={role.id} value={role.id}>
-                                        {role.name}
+                                        {formatRole(role.name)}
                                       </option>
                                   ))}
                                 </select>
                               </div>
                           ) : (
-                              <span className="role-pill">{targetUser.role?.name}</span>
+                              <span className="role-pill">{formatRole(targetUser.role?.name)}</span>
                           )}
                         </td>
 
                         <td>
-                      <span className={getStatusClass(targetUser)}>
-                        {getStatusLabel(targetUser)}
-                      </span>
-                      <span className="form-hint" style={{ marginTop: 4 }}>
-                        {targetUser.mfa_enabled ? "MFA enrolled" : "MFA not set up"}
-                      </span>
+                          <div className="user-status-cell">
+                            <span className={getStatusClass(targetUser)}>
+                              {getStatusLabel(targetUser)}
+                            </span>
+                            <span className="user-mfa-hint">
+                              {targetUser.mfa_enabled ? "MFA enrolled" : "MFA not set up"}
+                            </span>
+                          </div>
                         </td>
 
                         <td className="actions-col">

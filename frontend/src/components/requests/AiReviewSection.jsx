@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { generateAiReview, getAiReviews } from "../../api/changeRequests";
 import { extractApiError } from "../../utils/apiError";
 import { isAssignedReviewer } from "../../utils/requestPermissions";
-import { formatDate, formatEnumLabel } from "../../utils/requestPresentation";
+import { formatDateTime, formatEnumLabel } from "../../utils/requestPresentation";
 
 const SCOPES = {
   changed_files: {
@@ -88,7 +88,7 @@ function AiReviewResult({ result, requestRiskLevel }) {
     `${files.length} file${files.length === 1 ? "" : "s"}`,
     result.review_scope ? SCOPES[result.review_scope]?.label ?? result.review_scope : null,
     result.model_name,
-    formatDate(result.created_at),
+    formatDateTime(result.created_at),
   ].filter(Boolean);
 
   return (

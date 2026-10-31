@@ -35,9 +35,15 @@ export function parseUtcDate(value) {
   return new Date(value);
 }
 
-export function formatDate(value) {
+const pad = (n) => String(n).padStart(2, "0");
+
+// The one date format of the app: 31/10/2026 16:08 (day/month/year, 24-hour,
+// the viewer's local time). Seconds only where they matter (the audit log).
+export function formatDateTime(value, { seconds = false } = {}) {
   const date = parseUtcDate(value);
-  return date ? date.toLocaleString() : "—";
+  if (!date || Number.isNaN(date.getTime())) return "—";
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}` + (seconds ? `:${pad(date.getSeconds())}` : "");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${time}`;
 }
 
 export function getDecisionBadgeClass(decision) {

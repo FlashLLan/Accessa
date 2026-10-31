@@ -1,25 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { useAuth } from "../hooks/useAuth";
 import { canReviewRequest } from "../utils/requestPermissions";
 import { extractApiError } from "../utils/apiError";
 import {
-  formatDate,
+  formatDateTime,
   formatEnumLabel,
   getStatusBadgeClass,
 } from "../utils/requestPresentation";
 
 export default function ReviewPage() {
-  const { user, refreshMe } = useAuth();
+  const { user } = useAuth();
 
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [toastError, setToastError] = useState("");
-  const [decisionComment, setDecisionComment] = useState({});
-  const [actionLoadingId, setActionLoadingId] = useState(null);
 
   useEffect(() => {
     loadRequests();
@@ -41,38 +37,6 @@ export default function ReviewPage() {
       );
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function handleApprove(id) {
-    try {
-      setActionLoadingId(id);
-      setError("");
-      await requestService.approve(id, decisionComment[id] || "");
-      await Promise.all([loadRequests(), refreshMe()]);
-    } catch (err) {
-      console.error("Approve failed", err);
-      setToastError(
-        extractApiError(err, "Failed to approve the request.")
-      );
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
-  async function handleReject(id) {
-    try {
-      setActionLoadingId(id);
-      setError("");
-      await requestService.reject(id, decisionComment[id] || "");
-      await Promise.all([loadRequests(), refreshMe()]);
-    } catch (err) {
-      console.error("Reject failed", err);
-      setToastError(
-        extractApiError(err, "Failed to reject the request.")
-      );
-    } finally {
-      setActionLoadingId(null);
     }
   }
 
@@ -122,55 +86,22 @@ export default function ReviewPage() {
                     {formatEnumLabel(request.risk_level)} Risk
                   </span>
                   <span className="request-date">
-                    {formatDate(request.created_at)}
+                    {formatDateTime(request.created_at)}
                   </span>
-                </div>
-
-                <div className="form-group review-comment-box">
-                  <label htmlFor={`decision-${request.id}`}>
-                    Decision comment
-                  </label>
-                  <textarea
-                    id={`decision-${request.id}`}
-                    rows="3"
-                    placeholder="Optional approval/rejection note"
-                    value={decisionComment[request.id] || ""}
-                    onChange={(e) =>
-                      setDecisionComment((prev) => ({
-                        ...prev,
-                        [request.id]: e.target.value,
-                      }))
-                    }
-                  />
                 </div>
               </div>
 
+              {/* Decisions are made on the request page, after the Git context,
+                  diff and AI review have been seen. */}
               <div className="review-actions">
-                <Link to={`/requests/${request.id}`} className="btn btn-secondary">
+                <Link to={`/requests/${request.id}`} className="btn btn-primary">
                   Open
                 </Link>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => handleApprove(request.id)}
-                  disabled={actionLoadingId === request.id}
-                >
-                  {actionLoadingId === request.id ? "Working..." : "Approve"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={() => handleReject(request.id)}
-                  disabled={actionLoadingId === request.id}
-                >
-                  {actionLoadingId === request.id ? "Working..." : "Reject"}
-                </button>
               </div>
             </div>
           ))}
         </div>
       )}
-      <Toast message={toastError} type="error" onClose={() => setToastError("")} />
     </div>
   );
 }

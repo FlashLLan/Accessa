@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Toast from "../components/common/Toast";
 import { extractApiError } from "../utils/apiError";
 import { getAuditLogs } from "../api/auditLogs";
-import { parseUtcDate } from "../utils/requestPresentation";
+import { formatDateTime } from "../utils/requestPresentation";
+import { formatRole } from "../utils/roleUtils";
 import { Link } from "react-router-dom";
 
 // Audit action codes written by the backend today. Filters are built from these
@@ -67,17 +68,6 @@ function getCategoryForAction(action) {
   return "other";
 }
 
-function formatDateTime(value) {
-  if (!value) return "-";
-  const date = parseUtcDate(value);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-}
 
 function ActionBadge({ action }) {
   const category = getCategoryForAction(action);
@@ -95,10 +85,6 @@ function ActionBadge({ action }) {
       {ACTION_LABELS[action] ?? action}
     </span>
   );
-}
-
-function formatRole(role) {
-  return role ? role.charAt(0).toUpperCase() + role.slice(1) : "—";
 }
 
 // Readable reference for the entity; entity ids are never shown as text.
@@ -274,7 +260,7 @@ export default function AuditLogPage() {
                       onClick={() => hasExtra && toggleExpand(log.id)}
                     >
                       <td style={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "var(--text-soft)" }}>
-                        {formatDateTime(log.created_at)}
+                        {formatDateTime(log.created_at, { seconds: true })}
                       </td>
 
                       <td>

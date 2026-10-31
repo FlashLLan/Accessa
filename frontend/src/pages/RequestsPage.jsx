@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { requestService } from "../services/requestsService.js";
 import { extractApiError } from "../utils/apiError";
 import {
-  formatDate,
+  formatDateTime,
   formatEnumLabel,
   getStatusBadgeClass,
 } from "../utils/requestPresentation";
@@ -88,7 +88,7 @@ export default function RequestsPage() {
                   {formatEnumLabel(request.risk_level)} Risk
                 </span>
                 <span className="request-date">
-                  {formatDate(request.created_at)}
+                  {formatDateTime(request.created_at)}
                 </span>
               </div>
             </Link>
