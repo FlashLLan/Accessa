@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pyotp
 import pytest
-from fastapi.routing import APIRoute
 import jwt  # PyJWT
 
 from backend.core import mfa
@@ -226,16 +225,18 @@ def test_mfa_pending_token_is_rejected_by_every_other_endpoint(client, db, peopl
     public = {("POST", "/auth/login"), ("POST", "/auth/signup"), ("GET", "/"), ("GET", "/health"),
               ("POST", "/auth/mfa/verify")}
 
+    # Every API endpoint, from the OpenAPI schema: since FastAPI 0.16x app.routes holds
+    # included routers as single entries, not their routes. /health is the only route
+    # left out of the schema, and it is public.
     checked = 0
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        for method in route.methods:
-            if (method, route.path) in public:
+    for route_path, operations in app.openapi()["paths"].items():
+        for method in operations:
+            method = method.upper()
+            if (method, route_path) in public:
                 continue
-            path = re.sub(r"\{[^}]+\}", "1", route.path)
+            path = re.sub(r"\{[^}]+\}", "1", route_path)
             response = client.request(method, path, headers=_h(token), json={})
-            assert response.status_code == 401, (method, route.path, response.status_code)
+            assert response.status_code == 401, (method, route_path, response.status_code)
             checked += 1
     assert checked > 30
 

@@ -1,0 +1,12 @@
+# Snyk (https://snyk.io) policy file, https://docs.snyk.io/manage-risk/policies/the-.snyk-file
+version: v1.25.0
+ignore: {}
+patch: {}
+exclude:
+  # Snyk Code: tests/ is left out of the code analysis. Its only findings are
+  # hardcoded passwords (39 LOW) for test users. They are fixed values that exist
+  # only in the throwaway test database the suite creates and drops; they are not
+  # credentials of any real account or deployment. Dependency scans are not
+  # affected by this exclusion.
+  code:
+    - tests/**
