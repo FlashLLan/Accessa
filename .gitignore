@@ -31,3 +31,7 @@ Thumbs.db
 *.md
 !DEPLOYMENT.md
 *.pdf
+
+# Local test and scan output
+pytest-results*.txt
+snyk-*.txt
