@@ -11,7 +11,9 @@ import {
   getChangeRequests,
   getReviewActions,
   rejectChangeRequest,
+  saveGitContext,
   submitChangeRequest,
+  updateChangeRequest,
 } from "../api/changeRequests";
 
 export const requestService = {
@@ -25,6 +27,14 @@ export const requestService = {
 
   async create(payload) {
     return createChangeRequest(payload);
+  },
+
+  async update(id, payload) {
+    return updateChangeRequest(id, payload);
+  },
+
+  async saveGitContext(id, payload) {
+    return saveGitContext(id, payload);
   },
 
   async submit(id) {

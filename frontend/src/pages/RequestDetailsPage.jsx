@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import Toast from "../components/common/Toast";
 import AiReviewSection from "../components/requests/AiReviewSection";
 import DiffView from "../components/requests/DiffView";
@@ -13,6 +13,7 @@ import {
   canApplyRequest,
   canApproveRequest,
   canDelegateRequest,
+  canEditRequest,
   canEscalateRequest,
   canRejectRequest,
   canSubmitRequest,
@@ -150,6 +151,7 @@ function GitContextCard({ git, head }) {
 export default function RequestDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, refreshMe } = useAuth();
 
   const [request, setRequest] = useState(null);
@@ -166,12 +168,18 @@ export default function RequestDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [toastError, setToastError] = useState("");
-  const [actionMessage, setActionMessage] = useState("");
+  // "Draft saved." after returning from the edit form.
+  const [actionMessage, setActionMessage] = useState(location.state?.message || "");
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     loadAll();
   }, [id]);
+
+  // Show the message once: a reload of the page should not repeat it.
+  useEffect(() => {
+    if (location.state?.message) navigate(location.pathname, { replace: true, state: null });
+  }, [location, navigate]);
 
   async function loadAll() {
     try {
@@ -372,6 +380,7 @@ export default function RequestDetailsPage() {
   }
 
 const canSubmit = canSubmitRequest(user, request);
+const canEdit = canEditRequest(user, request);
 const canApprove = canApproveRequest(user, request);
 const canReject = canRejectRequest(user, request);
 const canApply = canApplyRequest(user, request);
@@ -464,7 +473,7 @@ const canTransfer = canEscalate || canDelegate;
         </div>
       </div>
 
-      {(canReview || canSubmit || canApply) && (
+      {(canReview || canSubmit || canEdit || canApply) && (
         <div className="details-section">
           <h3 className="details-section-title">Actions</h3>
 
@@ -491,6 +500,12 @@ const canTransfer = canEscalate || canDelegate;
               >
                 {actionLoading ? "Working..." : "Submit for Review"}
               </button>
+            )}
+
+            {canEdit && (
+              <Link to={`/requests/${id}/edit`} className="btn btn-secondary">
+                Edit
+              </Link>
             )}
 
             {canReview && (

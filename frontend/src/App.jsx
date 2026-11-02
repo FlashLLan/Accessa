@@ -37,6 +37,7 @@ function App() {
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/new" element={<CreateRequestPage />} />
           <Route path="/requests/:id" element={<RequestDetailsPage />} />
+          <Route path="/requests/:id/edit" element={<CreateRequestPage />} />
 
           <Route
             element={<RoleGuard allowedRoles={REVIEWER_ROLES} allowIf={hasPendingReviews} />}

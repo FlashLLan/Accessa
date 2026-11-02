@@ -15,6 +15,18 @@ export async function createChangeRequest(payload) {
   return response.data;
 }
 
+// Draft only, creator only (the backend checks both and the approval matrix).
+export async function updateChangeRequest(id, payload) {
+  const response = await client.patch(`/change-requests/${id}`, payload);
+  return response.data;
+}
+
+// Creates or replaces the draft's Git context; empty fields clear stored values.
+export async function saveGitContext(id, payload) {
+  const response = await client.post(`/change-requests/${id}/git-context`, payload);
+  return response.data;
+}
+
 export async function submitChangeRequest(id) {
   const response = await client.post(`/change-requests/${id}/submit`);
   return response.data;

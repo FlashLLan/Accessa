@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import Toast from "../components/common/Toast";
 import { requestService } from "../services/requestsService.js";
 import { getReviewers } from "../api/users";
 import { useAuth } from "../hooks/useAuth";
 import { extractApiError } from "../utils/apiError";
 import { formatRole } from "../utils/roleUtils";
+import { canEditRequest } from "../utils/requestPermissions";
 
 const initialForm = {
   title: "",
@@ -36,8 +37,26 @@ function isGithubPullRequest(url) {
   return GITHUB_PR_URL.test((url || "").trim());
 }
 
+// With a GitHub pull request link, the changed files and the diff are fetched at
+// submission: anything typed into those two fields is cleared and never sent.
+function withoutManualDiff(git) {
+  return isGithubPullRequest(git.pull_request_url)
+    ? { ...git, changed_files_summary: "", diff_text: "" }
+    : git;
+}
+
+// The draft's stored values as form values (null -> "").
+function toForm(template, values) {
+  return Object.fromEntries(
+    Object.keys(template).map((key) => [key, values?.[key] == null ? "" : String(values[key])])
+  );
+}
+
+// Create a request, or (with :id in the route) edit a draft: same form, pre-filled.
 export default function CreateRequestPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const { user } = useAuth();
 
   const [form, setForm] = useState(initialForm);
@@ -49,6 +68,43 @@ export default function CreateRequestPage() {
   const [error, setError] = useState("");
   const [toastError, setToastError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [draft, setDraft] = useState(null);
+  const [isLoadingDraft, setIsLoadingDraft] = useState(isEdit);
+  const [draftError, setDraftError] = useState("");
+  const [savedGitForm, setSavedGitForm] = useState(null);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    let ignore = false;
+
+    async function loadDraft() {
+      try {
+        setIsLoadingDraft(true);
+        const request = await requestService.getById(id);
+        if (ignore) return;
+        setDraft(request);
+        setForm({
+          ...toForm(initialForm, request),
+          assigned_reviewer_id: String(request.assigned_reviewer?.id ?? ""),
+        });
+        const git = toForm(initialGitForm, request.git_context);
+        setSavedGitForm(request.git_context ? git : null);
+        setGitForm(withoutManualDiff(git));
+        setGitOpen(Boolean(request.git_context));
+      } catch (err) {
+        if (ignore) return;
+        console.error("Failed to load the draft", err);
+        setDraftError(extractApiError(err, "Failed to load the request. Please try again."));
+      } finally {
+        if (!ignore) setIsLoadingDraft(false);
+      }
+    }
+
+    loadDraft();
+    return () => {
+      ignore = true;
+    };
+  }, [isEdit, id]);
 
   useEffect(() => {
     async function loadReviewers() {
@@ -81,7 +137,25 @@ export default function CreateRequestPage() {
 
   const handleGitChange = (e) => {
     const { name, value } = e.target;
-    setGitForm((prev) => ({ ...prev, [name]: value }));
+    setGitForm((prev) => withoutManualDiff({ ...prev, [name]: value }));
+  };
+
+  // Edit: the request fields with PATCH, then the Git context (only if it changed)
+  // through the Git context endpoint, where empty fields clear stored values.
+  const saveDraft = async () => {
+    await requestService.update(id, {
+      ...form,
+      assigned_reviewer_id: Number(form.assigned_reviewer_id),
+    });
+
+    const git = withoutManualDiff(gitForm);
+    const hasData = Object.values(git).some((v) => v.trim() !== "");
+    const changed = JSON.stringify(git) !== JSON.stringify(savedGitForm ?? initialGitForm);
+    if (changed && (savedGitForm || hasData)) {
+      await requestService.saveGitContext(id, git);
+    }
+
+    navigate(`/requests/${id}`, { state: { message: "Draft saved." } });
   };
 
   const handleSubmit = async (e) => {
@@ -92,13 +166,18 @@ export default function CreateRequestPage() {
       setError("");
       setSuccessMessage("");
 
+      if (isEdit) {
+        await saveDraft();
+        return;
+      }
+
       const payload = {
         ...form,
         assigned_reviewer_id: Number(form.assigned_reviewer_id),
       };
 
       // Include git_context only if at least one field is non-empty
-      const gitEntries = Object.entries(gitForm).filter(([, v]) => v.trim() !== "");
+      const gitEntries = Object.entries(withoutManualDiff(gitForm)).filter(([, v]) => v.trim() !== "");
       if (gitEntries.length > 0) {
         const gitPayload = {};
         gitEntries.forEach(([k, v]) => { gitPayload[k] = v; });
@@ -115,18 +194,42 @@ export default function CreateRequestPage() {
         navigate(`/requests/${created.id}`);
       }, 600);
     } catch (err) {
-      console.error("Failed to create request", err);
-      setToastError(extractApiError(err, "Failed to create the request. Please check your input."));
+      console.error(isEdit ? "Failed to save the draft" : "Failed to create request", err);
+      setToastError(extractApiError(
+        err,
+        isEdit ? "Failed to save the draft. Please check your input." : "Failed to create the request. Please check your input."
+      ));
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const editRefused = isEdit && draft && !canEditRequest(user, draft)
+    ? "Only the creator can edit a request, and only while it is a draft."
+    : "";
+  if (isEdit && (isLoadingDraft || draftError || editRefused)) {
+    return (
+      <div className="page-card">
+        <h2 className="page-title">Edit Request</h2>
+        {draftError || editRefused
+          ? <div className="auth-error">{draftError || editRefused}</div>
+          : <p>Loading draft...</p>}
+        <div className="page-actions">
+          <Link to={`/requests/${id}`} className="btn btn-secondary">Back to request</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const fetchesFromGithub = isGithubPullRequest(gitForm.pull_request_url);
+
   return (
     <div className="page-card">
-      <h2 className="page-title">Create Request</h2>
+      <h2 className="page-title">{isEdit ? "Edit Request" : "Create Request"}</h2>
       <p className="page-subtitle">
-        Describe the change, its risk and who should review it.
+        {isEdit
+          ? "Change the draft before you submit it for review."
+          : "Describe the change, its risk and who should review it."}
       </p>
 
       {error && <div className="auth-error">{error}</div>}
@@ -358,60 +461,68 @@ export default function CreateRequestPage() {
                 <span className="form-hint">
                   With a public github.com pull request link, the commit, the list of changed
                   files and the diff are fetched from GitHub automatically when you submit the
-                  request. Values typed below are replaced, and the submission fails if GitHub
-                  cannot be read (e.g. a private repository).
+                  request; the submission fails if GitHub cannot be read (e.g. a private
+                  repository). Without one, enter them below; they are marked as not verified.
                 </span>
               </div>
 
-              {isGithubPullRequest(gitForm.pull_request_url) && (
+              {fetchesFromGithub ? (
                 <p className="git-context-hint">
-                  The fields below will be filled in from GitHub at submission.
+                  Changed files and diff will be fetched from GitHub at submission.
                 </p>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label htmlFor="gc_changed_files_summary">Changed files</label>
+                    <textarea
+                      id="gc_changed_files_summary"
+                      name="changed_files_summary"
+                      rows="3"
+                      value={gitForm.changed_files_summary}
+                      onChange={handleGitChange}
+                      placeholder="backend/auth.py, frontend/LoginPage.jsx"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="gc_diff_text">Diff / change summary</label>
+                    <textarea
+                      id="gc_diff_text"
+                      name="diff_text"
+                      rows="5"
+                      value={gitForm.diff_text}
+                      onChange={handleGitChange}
+                      placeholder="Briefly describe what changed and why"
+                    />
+                  </div>
+                </>
               )}
-
-              <div className="form-group">
-                <label htmlFor="gc_changed_files_summary">Changed files summary</label>
-                <textarea
-                  id="gc_changed_files_summary"
-                  name="changed_files_summary"
-                  rows="3"
-                  value={gitForm.changed_files_summary}
-                  onChange={handleGitChange}
-                  placeholder="backend/auth.py, frontend/LoginPage.jsx"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="gc_diff_text">Diff / change summary</label>
-                <textarea
-                  id="gc_diff_text"
-                  name="diff_text"
-                  rows="5"
-                  value={gitForm.diff_text}
-                  onChange={handleGitChange}
-                  placeholder="Briefly describe what changed and why"
-                />
-              </div>
             </div>
           )}
         </div>
 
         <div className="page-actions">
           <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Creating..." : "Create Request"}
+            {isEdit
+              ? (isSubmitting ? "Saving..." : "Save Changes")
+              : (isSubmitting ? "Creating..." : "Create Request")}
           </button>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            onClick={() => {
-              setForm(initialForm);
-              setGitForm(initialGitForm);
-              setError("");
-              setSuccessMessage("");
-            }}
-          >
-            Reset
-          </button>
+          {isEdit ? (
+            <Link to={`/requests/${id}`} className="btn btn-secondary">Cancel</Link>
+          ) : (
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => {
+                setForm(initialForm);
+                setGitForm(initialGitForm);
+                setError("");
+                setSuccessMessage("");
+              }}
+            >
+              Reset
+            </button>
+          )}
         </div>
       </form>
     </div>

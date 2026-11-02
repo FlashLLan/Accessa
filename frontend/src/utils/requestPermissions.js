@@ -43,6 +43,11 @@ export function canSubmitRequest(user, request) {
   );
 }
 
+// Same rule as submitting: the backend lets only the creator edit, and only a draft.
+export function canEditRequest(user, request) {
+  return canSubmitRequest(user, request);
+}
+
 export function canReviewRequest(user, request) {
   if (request?.status !== "pending_review") return false;
   if (isRequestCreator(user, request)) return false;
