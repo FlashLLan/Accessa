@@ -5,21 +5,28 @@
    and top-level config files (related_files).
 3. Mask hard-coded secret values in everything that is sent (secret_masking).
 4. Assemble the input within MAX_INPUT_CHARS; whatever does not fit is skipped
-   and reported.
+   and reported. Every part written by other people is wrapped in markers that
+   carry a random code for this review, given only in the system message, so
+   the data cannot imitate the end of a block.
 5. Ask the model for structured JSON (openai_client) and validate it.
+6. Prompt injection: text that tries to instruct the model (prompt_injection)
+   always adds a red flag, whatever the model answered.
 
 Nothing is stored here: the caller saves the result and its audit entry. The
 review is advisory and never changes the request's risk level or status.
 """
+import secrets as secrets_module
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, ValidationError, field_validator
 
 from backend.models.enums import AIReviewScope
 from backend.services import related_files
-from backend.services.ai_review_prompt import OUTPUT_SCHEMA, PROMPT_VERSION, SYSTEM_PROMPT
+from backend.services.ai_review_prompt import OUTPUT_SCHEMA, PROMPT_VERSION, system_prompt
 from backend.services.github_service import MAX_FILE_BYTES, GitHubClient, PullRequestSnapshot
 from backend.services.openai_client import AIServiceError, OpenAIClient
+from backend.services.prompt_injection import looks_like_injection
+from backend.services.prompt_injection import red_flag as injection_red_flag
 from backend.services.pull_request_data import stored_files, stored_total
 from backend.services.secret_masking import mask_secret_values
 
@@ -60,6 +67,9 @@ class ReviewInput:
     input_truncated: bool = False
     secrets_masked: int = 0
     head_moved: bool = False          # the PR has new commits since submission
+    marker: str = ""                  # random code in this review's block markers
+    # Where text that tries to instruct the model was found ("request text" or a path).
+    injection_suspected: list[str] = field(default_factory=list)
 
 
 class AIReviewOutput(BaseModel):
@@ -186,13 +196,19 @@ def _metadata_block(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: A
     return "\n".join(lines)
 
 
+def new_marker() -> str:
+    return secrets_module.token_hex(6)
+
+
 def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIReviewScope,
-                extra: list[_File]) -> ReviewInput:
+                extra: list[_File], marker: str | None = None) -> ReviewInput:
+    marker = marker or new_marker()
     result = ReviewInput(
         text="",
         reviewed_commit=snapshot.head_sha,
         review_scope=scope,
         changed_files_total=snapshot.changed_files_total,
+        marker=marker,
     )
     parts: list[str] = []
     used = 0
@@ -204,7 +220,9 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
     def masked(text: str, path: str | None = None) -> tuple[str, list[str]]:
         return mask_secret_values(text, path)
 
-    def try_add(block: str, found: list[str]) -> bool:
+    def try_add(block: str, found: list[str], content: str | None = None, location: str | None = None) -> bool:
+        """`content`: the part of `block` written by other people, checked for
+        prompt injection (the markers around it are ours)."""
         nonlocal used
         if used + len(block) > MAX_INPUT_CHARS:
             result.input_truncated = True
@@ -212,6 +230,8 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
         parts.append(block)
         used += len(block)
         secrets.update(found)
+        if location and looks_like_injection(content) and location not in result.injection_suspected:
+            result.injection_suspected.append(location)
         return True
 
     def skip(path: str, reason: str) -> None:
@@ -220,7 +240,7 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
 
     # 1. Request and PR metadata: always included (masked like everything else).
     meta, n = masked(_metadata_block(facts, snapshot, scope))
-    try_add(meta, n)
+    try_add(f"<<<REQUEST#{marker}>>>\n{meta}\n<<<END REQUEST#{marker}>>>", n, meta, "request text")
 
     # 2. The diff, file by file.
     try_add("\n\n# Diff (unified, per file)", [])
@@ -229,8 +249,8 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
             continue
         rename = f" (renamed from {f.previous_path})" if f.previous_path else ""
         patch, n = masked(f.patch, f.path)
-        block = f"\n\n<<<DIFF {f.path} [{f.status}{rename}]>>>\n{patch}\n<<<END DIFF>>>"
-        if try_add(block, n):
+        block = f"\n\n<<<DIFF#{marker} {f.path} [{f.status}{rename}]>>>\n{patch}\n<<<END DIFF#{marker}>>>"
+        if try_add(block, n, patch, f.path):
             reviewed.setdefault(f.path, "changed")
         else:
             skip(f.path, "size_limit")
@@ -242,8 +262,8 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
             skip(f.path, f.skipped_reason or "unavailable")
             continue
         content, n = masked(f.content, f.path)
-        block = f"\n\n<<<FILE {f.path}>>>\n{content}\n<<<END FILE>>>"
-        if try_add(block, n):
+        block = f"\n\n<<<FILE#{marker} {f.path}>>>\n{content}\n<<<END FILE#{marker}>>>"
+        if try_add(block, n, content, f.path):
             reviewed.setdefault(f.path, "changed")
         else:
             skip(f.path, "size_limit")
@@ -256,8 +276,8 @@ def build_input(facts: RequestFacts, snapshot: PullRequestSnapshot, scope: AIRev
             skip(f.path, f.reason or "unavailable")
             continue
         content, n = masked(f.content, f.path)
-        block = f"\n\n<<<FILE {f.path} [{f.source}]>>>\n{content}\n<<<END FILE>>>"
-        if try_add(block, n):
+        block = f"\n\n<<<FILE#{marker} {f.path} [{f.source}]>>>\n{content}\n<<<END FILE#{marker}>>>"
+        if try_add(block, n, content, f.path):
             reviewed.setdefault(f.path, f.source)
         else:
             skip(f.path, "size_limit")
@@ -337,7 +357,7 @@ def run_ai_review(facts: RequestFacts, scope: AIReviewScope,
 
     review_input = build_input(facts, snapshot, scope, extra)
     review_input.head_moved = bool(snapshot.current_head_sha and snapshot.current_head_sha != snapshot.head_sha)
-    raw = ai.complete_json(SYSTEM_PROMPT, review_input.text, OUTPUT_SCHEMA, "ai_review")
+    raw = ai.complete_json(system_prompt(review_input.marker), review_input.text, OUTPUT_SCHEMA, "ai_review")
     try:
         output = AIReviewOutput.model_validate(raw)
     except ValidationError:
@@ -347,4 +367,6 @@ def run_ai_review(facts: RequestFacts, scope: AIReviewScope,
         output.red_flags.insert(0, f"{review_input.secrets_masked} hard-coded secret(s) detected and masked")
     if review_input.head_moved:
         output.red_flags.insert(0, HEAD_MOVED_FLAG)
+    if review_input.injection_suspected:
+        output.red_flags.insert(0, injection_red_flag(review_input.injection_suspected))
     return AIReview(input=review_input, output=output, model_name=ai.model)

@@ -198,13 +198,16 @@ def trigger_ai_review(
         entity_type="change_request",
         entity_id=request_id,
         request_id=request_id,
-        severity="low",
+        severity="medium" if data.injection_suspected else "low",
         new_value=data.review_scope.value,
         details=(
             f"AI review generated: commit {data.reviewed_commit}, scope {data.review_scope.value}, "
             f"{len(data.files_reviewed)} file(s) reviewed, {len(data.files_skipped)} skipped, "
             f"{data.secrets_masked} secret(s) masked{', input truncated' if data.input_truncated else ''}, "
-            f"model {review.model_name}, prompt {review.prompt_version}"
+            # Only how many places, never the text that was found.
+            + (f"possible prompt injection in {len(data.injection_suspected)} place(s), "
+               if data.injection_suspected else "")
+            + f"model {review.model_name}, prompt {review.prompt_version}"
         ),
     )
     db.commit()

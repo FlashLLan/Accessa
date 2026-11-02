@@ -98,9 +98,9 @@ def test_changed_files_scope_reads_the_changed_files_at_the_prs_head_sha(client,
     assert all(r.url.params["ref"] == SHA for r in github.requests if "/contents/" in r.url.path)
     assert not any("/git/trees/" in r.url.path for r in github.requests)
 
-    sent = ai.user_message
-    assert "<<<DIFF app/export.py [modified]>>>" in sent
-    assert "<<<FILE app/export.py>>>" in sent and "from .retry import backoff" in sent
+    sent, m = ai.user_message, ai.marker
+    assert f"<<<DIFF#{m} app/export.py [modified]>>>" in sent and f"<<<END DIFF#{m}>>>" in sent
+    assert f"<<<FILE#{m} app/export.py>>>" in sent and "from .retry import backoff" in sent
     assert f"Reviewed commit: {SHA}" in sent
     assert "app/utils.py" not in sent and "package.json" not in sent
 
@@ -158,9 +158,9 @@ def test_extended_scope_adds_imports_importers_and_config_files(client, db, peop
     assert response.json()["review_scope"] == "extended"
     assert "app/unrelated.py" not in reviewed and "README.md" not in reviewed
 
-    sent = ai.user_message
-    assert "<<<FILE app/utils.py [related]>>>" in sent
-    assert "<<<FILE Dockerfile [config]>>>" in sent
+    sent, m = ai.user_message, ai.marker
+    assert f"<<<FILE#{m} app/utils.py [related]>>>" in sent
+    assert f"<<<FILE#{m} Dockerfile [config]>>>" in sent
     assert all(r.url.params.get("ref") == SHA for r in github.requests if "/contents/" in r.url.path)
     assert any(r.url.path == f"/repos/octo/demo/git/trees/{SHA}" for r in github.requests)
     assert db.query(AIReviewResult).one().review_scope is AIReviewScope.EXTENDED

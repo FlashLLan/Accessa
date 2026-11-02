@@ -100,6 +100,15 @@ class FakeOpenAI:
     def user_message(self) -> str:
         return self.body["messages"][1]["content"]
 
+    @property
+    def system_message(self) -> str:
+        return self.body["messages"][0]["content"]
+
+    @property
+    def marker(self) -> str:
+        """The random code of the block markers, given in the system message."""
+        return self.system_message.rsplit("Marker code for this review: ", 1)[1].strip()
+
 
 @contextmanager
 def mocked_services(github: FakeGitHub, ai: FakeOpenAI, *, configured=True):
