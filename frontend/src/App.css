@@ -987,6 +987,14 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.workspace-link {
+  margin-bottom: 20px;
+}
+
+.workspace-link .workspace-address {
+  margin: 6px 0 0;
+}
+
 .workspace-address code {
   flex: 1;
   min-width: 0;

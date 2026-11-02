@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Toast from "../components/common/Toast";
+import WorkspaceLink from "../components/common/WorkspaceLink";
 import { useAuth } from "../hooks/useAuth";
 import { extractApiError } from "../utils/apiError";
 import {
@@ -15,6 +16,7 @@ import {
 } from "../api/users";
 import { formatDateTime } from "../utils/requestPresentation";
 import { formatRole } from "../utils/roleUtils";
+import { workspaceSignInUrl } from "../utils/storage";
 
 // A details box with several counts on one line, e.g. "10 approved  2 rejected".
 function DetailCounts({ label, counts }) {
@@ -226,7 +228,13 @@ const filteredUsers = useMemo(() => {
         role_id: Number(createForm.role_id),
       });
 
-      setToast({ message: "User created successfully.", type: "success" });
+      const signInUrl = workspaceSignInUrl(currentUser?.workspace?.slug);
+      setToast({
+        message: signInUrl
+          ? `User created. Send them the sign-in link ${signInUrl} together with the initial password.`
+          : "User created successfully.",
+        type: "success",
+      });
       setCreateForm({
         full_name: "",
         email: "",
@@ -434,6 +442,11 @@ const handleResetMfa = (targetUser) => {
             {showCreateForm ? "Close" : "Add User"}
           </button>
         </div>
+
+        <WorkspaceLink
+          slug={currentUser?.workspace?.slug}
+          hint="New users sign in here with the initial password you set; they change it at first sign-in."
+        />
 
         {error && <div className="auth-error">{error}</div>}
         <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: "", type: "error" })} />

@@ -22,3 +22,8 @@ export function setLastWorkspaceSlug(slug) {
 export function workspaceLoginPath(slug) {
   return slug ? `/w/${slug}` : "/login";
 }
+
+// The workspace's full sign-in link on the current host, e.g. https://accessa.dev/w/acme.
+export function workspaceSignInUrl(slug) {
+  return slug ? `${window.location.origin}${workspaceLoginPath(slug)}` : "";
+}

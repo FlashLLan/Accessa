@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Toast from "../components/common/Toast";
+import WorkspaceLink from "../components/common/WorkspaceLink";
 import { updateMe, changePassword, getMyStats } from "../api/users";
 import { useAuth } from "../hooks/useAuth";
 import { formatDateTime } from "../utils/requestPresentation";
@@ -157,6 +158,8 @@ export default function AccountPage() {
             <strong>{user?.created_at ? formatDateTime(user.created_at) : "—"}</strong>
           </div>
         </div>
+
+        <WorkspaceLink slug={user?.workspace?.slug} />
 
         <form onSubmit={handleSaveProfile}>
           <div className="form-group" style={{ marginBottom: "16px" }}>
