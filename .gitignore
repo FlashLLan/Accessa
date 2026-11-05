@@ -30,6 +30,7 @@ Thumbs.db
 #prompts
 *.md
 !DEPLOYMENT.md
+!README.md
 *.pdf
 
 # Local test and scan output
