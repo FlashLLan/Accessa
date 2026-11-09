@@ -46,15 +46,13 @@ def _get_target_reviewer(target_id: int, current_user: User, db: Session, worksp
 
 
 def _assert_can_transfer(cr: ChangeRequest, current_user: User, verb: str):
-    """Only the assigned reviewer (or an admin) may hand a request on.
+    """Only the assigned reviewer may hand a request on.
 
-    Escalation and delegation move assigned_reviewer_id to the target, so after
-    a transfer the previous reviewer loses this right automatically.
+    Escalation and delegation move assigned_reviewer_id to the target, so after a
+    transfer the previous reviewer loses this right automatically.
     """
-    if current_user.role.name == "admin":
-        return
     if current_user.id != cr.assigned_reviewer_id:
-        raise HTTPException(status_code=403, detail=f"Only the assigned reviewer or admin can {verb}")
+        raise HTTPException(status_code=403, detail=f"Only the assigned reviewer can {verb}")
 
 
 def _assert_matrix_eligible(target: User, cr: ChangeRequest):

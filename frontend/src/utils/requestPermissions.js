@@ -87,13 +87,13 @@ export function canViewRequestComments(user, request) {
 export function canEscalateRequest(user, request) {
   if (request?.status !== "pending_review") return false;
   if (isRequestCreator(user, request)) return false;
-  return isAdmin(user) || isAssignedReviewer(user, request);
+  return isAssignedReviewer(user, request);
 }
 
 export function canDelegateRequest(user, request) {
   if (request?.status !== "pending_review") return false;
   if (isRequestCreator(user, request)) return false;
-  return isAdmin(user) || isAssignedReviewer(user, request);
+  return isAssignedReviewer(user, request);
 }
 
 // Roles that can be an assigned reviewer (approval matrix; mid reviews junior/low).
