@@ -85,9 +85,6 @@ export default function ReviewPage() {
                   <span className="request-chip">
                     {formatEnumLabel(request.risk_level)} Risk
                   </span>
-                  <span className="request-date">
-                    {formatDateTime(request.created_at)}
-                  </span>
                 </div>
               </div>
 
@@ -97,6 +94,9 @@ export default function ReviewPage() {
                 <Link to={`/requests/${request.id}`} className="btn btn-primary">
                   Open
                 </Link>
+                <span className="request-date">
+                  {formatDateTime(request.created_at)}
+                </span>
               </div>
             </div>
           ))}
