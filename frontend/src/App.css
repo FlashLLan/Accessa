@@ -649,8 +649,10 @@
   text-align: center;
 }
 
+/* Date in the card's bottom-right corner, level with the risk chip. */
 .review-actions .request-date {
-  text-align: center;
+  margin-top: auto;
+  text-align: right;
 }
 
 .toolbar-row {
